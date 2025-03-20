@@ -40,12 +40,14 @@ Make sure the configurations in run_test_demo.sh meet your requirements and run:
 ```
 sh run_test_demo.sh
 ```
+The predict outputs can be found in the 'outputs' folder.
 
 ### Run Training Demo
 Make sure the configurations in run_train_demo.sh meet your requirements and run: 
 ```
 sh run_train_demo.sh
 ```
+The trained model weights can be found in the "snapshots" folder.
 
 ### Full Size Training
 Make sure you have prepared your datasets according to the [demo dataset](https://drive.google.com/file/d/1gvfco5zyRDASGO2BOYCjZuRxbN7MHhsT/view?usp=drive_link), and the configurations in run_train.sh meet your requirements, then run:
