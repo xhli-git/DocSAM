@@ -30,11 +30,11 @@ class DocSAM(nn.Module):
 
         # Set your pretrained model path here.
         if model_size=="base":
-            mask2former_path = "./pretrained_model/mask2former/facebook-mask2former-swin-base-coco-panoptic/"
+            mask2former_path = "./pretrained_model/mask2former/mask2former-swin-base-coco-panoptic/"
         elif model_size=="large":
-            mask2former_path = "./pretrained_model/mask2former/facebook-mask2former-swin-large-coco-panoptic/"
+            mask2former_path = "./pretrained_model/mask2former/mask2former-swin-large-coco-panoptic/"
         else:
-            mask2former_path = "./pretrained_model/mask2former/facebook-mask2former-swin-base-coco-panoptic/"
+            mask2former_path = "./pretrained_model/mask2former/mask2former-swin-base-coco-panoptic/"
         print("mask2former_path:", mask2former_path)
         
         sentence_path = "./pretrained_model/sentence/all-MiniLM-L6-v2"

@@ -62,7 +62,7 @@ RESTORE_FROM=./pretrained_model/docsam_large_all_dataset.pth
 SNAPSHOT_DIR=./snapshots/
 START_ITER=0
 TOTAL_ITER=4000
-GPU_IDS=6,7
+GPU_IDS=0,1
 
 export OMP_NUM_THREADS=1
 CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun --rdzv_backend=c10d --rdzv_endpoint=localhost:0 --nnodes=1 --nproc_per_node=2 train.py \

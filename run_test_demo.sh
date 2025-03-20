@@ -24,12 +24,12 @@ EVAL_PATH_5=${DATA_PATH}/Table/WTW/data/WTW/test/
 EVAL_PATH_6=${DATA_PATH}/SceneText/Total-Text/data/TotalText/test/
 
 
-STAGE=test
+STAGE=inference
 MODEL=./pretrained_model/docsam_large_all_dataset.pth
 MODEL_SIZE=large
 SAVE_PATH=./outputs/outputs_test/
 MAX_NUM=10
-GPU_IDS=6
+GPU_IDS=0
 
 export OMP_NUM_THREADS=1
 CUDA_VISIBLE_DEVICES=${GPU_IDS} python -B -u test.py \
