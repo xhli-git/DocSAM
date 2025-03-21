@@ -32,7 +32,13 @@ from test import test
 
 MODEL_SIZE = "base"
 SAVE_PATH  = './outputs/outputs_train/'
+
+SHORT_RANGE = (704, 896)
+PATCH_SIZE = (640, 640)
+PATCH_NUM = 1
+KEEP_SIZE = False
 MAX_NUM = 10
+
 BATCH_SIZE = 8
 LEARNING_RATE = 1e-2
 MOMENTUM = 0.9
@@ -45,6 +51,35 @@ SNAPSHOT_DIR = './snapshots/'
 START_ITER = 0
 TOTAL_ITER = 1000
 GPU_IDS = '0'
+
+
+def str2bool(input_str):
+    """
+    Converts string input to boolean.
+
+    Args:
+        input_str (str): String representation of a boolean value.
+
+    Returns:
+        bool: Converted boolean value.
+    """
+    
+    if input_str.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif input_str.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def parse_tuple(input_str):
+    try:
+        parsed_tuple = tuple(map(int, input_str.split(',')))
+        if len(parsed_tuple) != 2:
+            raise ValueError
+        return parsed_tuple
+    except ValueError:
+        raise argparse.ArgumentTypeError("Input must be two integers separated by a comma (e.g., '1,2')")
 
 
 def get_arguments():
@@ -62,7 +97,12 @@ def get_arguments():
     parser.add_argument('--train-path', nargs='+', type=str, help='A list of paths to training datasets') 
     parser.add_argument("--eval-path", nargs='+', type=str, help='A list of paths to evaluation datasets') 
     parser.add_argument("--save-path", type=str, default=SAVE_PATH, help='Path to save the model predicts')
-    parser.add_argument('--max-num', type=int, default=MAX_NUM, help='Max image num for evaluation.') 
+    
+    parser.add_argument("--short-range", type=parse_tuple, default=SHORT_RANGE, help='Short side range')
+    parser.add_argument("--patch-size", type=parse_tuple, default=PATCH_SIZE, help='Patch size sampled from each image during training')
+    parser.add_argument("--patch-num", type=int, default=PATCH_NUM, help='Patch number')
+    parser.add_argument("--keep-size", type=str2bool, default=KEEP_SIZE, help='Whether to keep original image size')
+    parser.add_argument('--max-num', type=int, default=MAX_NUM, help='Max image num for evaluation.')  
     
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE, help='Number of samples per batch')
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE, help='Initial learning rate for the optimizer')
@@ -110,25 +150,6 @@ def MakePath(path):
     if not os.path.exists(os.path.dirname(path)):
         os.makedirs(os.path.dirname(path))
         return
-
-
-def str2bool(v):
-    """
-    Converts string input to boolean.
-
-    Args:
-        v (str): String representation of a boolean value.
-
-    Returns:
-        bool: Converted boolean value.
-    """
-    
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
 class DataLoaderX(DataLoader):
@@ -295,7 +316,7 @@ if __name__ == '__main__':
     model.train()
     
     # Create training dataset and loader
-    train_set = DocSAM_GT(args.train_path, short_range=(704, 896), patch_size=(640, 640), patch_num=1, stage="train")
+    train_set = DocSAM_GT(args.train_path, short_range=args.short_range, patch_size=args.patch_size, patch_num=args.patch_num, keep_size=args.keep_size, stage="train")
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_set, shuffle=True)
     train_loader = DataLoaderX(train_set, batch_size=int(args.batch_size/len(args.gpus.split(','))), num_workers=4, pin_memory=True, sampler=train_sampler, collate_fn=train_set.collate_fn)
     
@@ -312,7 +333,7 @@ if __name__ == '__main__':
     
     if local_rank == 0:
         # Evaluate initial performance metrics
-        min_loss, max_bbox_mAP, max_mask_mAP, max_mask_mF1, max_mIoU = test(model, args, max_num=args.max_num, stage="train") 
+        min_loss, max_bbox_mAP, max_mask_mAP, max_mask_mF1, max_mIoU = test(args, model, max_num=args.max_num, stage="train") 
         
     flag = True
     for i_epoch in range(num_epoch):
@@ -351,7 +372,7 @@ if __name__ == '__main__':
             # Save snapshots and update best model if necessary
             if current_iter % 200 == 0 or current_iter == args.total_iter:
                 if local_rank == 0:
-                    loss, bbox_mAP, mask_mAP, mask_mF1, mIoU = test(model, args, max_num=args.max_num, stage="train") 
+                    loss, bbox_mAP, mask_mAP, mask_mF1, mIoU = test(args, model, max_num=args.max_num, stage="train") 
                     if mask_mAP > max_mask_mAP:
                         print(datetime.datetime.now(), 'Best model updated, mAP: {:.4f}-->{:.4f}, taking snapshot...'.format(max_mask_mAP, mask_mAP))
                         torch.save(model.module.state_dict(), os.path.join(args.snapshot_dir, 'best_model.pth'))

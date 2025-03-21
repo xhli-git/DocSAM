@@ -36,26 +36,67 @@ DocSAM is build upon Mask2Former and Sentence-BERT, please download their pretra
 - Download pretrained DocSAM weights from the Model Zoo below and place them in the designated './pretrained_model' folder.
 
 ### Run Inference Demo
-Make sure the configurations in run_test_demo.sh meet your requirements and run: 
+Make sure the configurations in ```run_test_demo.sh``` meet your requirements and run: 
 ```
 sh run_test_demo.sh
 ```
 The predict outputs can be found in the 'outputs' folder.
 
 ### Run Training Demo
-Make sure the configurations in run_train_demo.sh meet your requirements and run: 
+Make sure the configurations in ```run_train_demo.sh``` meet your requirements and run: 
 ```
 sh run_train_demo.sh
 ```
 The trained model weights can be found in the "snapshots" folder.
 
+### More Scripts
+In the 'scripts' folder, we provide some scripts helpful for training, testing and inference. You can select or create your own script based on them. We also provide training scripts for curriculum learning, which progressively incorporates new datasets into the training process to accelerate model convergence. 
+
 ### Full Size Training
-Make sure you have prepared your datasets according to the [demo dataset](https://drive.google.com/file/d/1gvfco5zyRDASGO2BOYCjZuRxbN7MHhsT/view?usp=drive_link), and the configurations in run_train.sh meet your requirements, then run:
+Make sure you have prepared your datasets according to the [demo dataset](https://drive.google.com/file/d/1gvfco5zyRDASGO2BOYCjZuRxbN7MHhsT/view?usp=drive_link), and the configurations in ```run_train_curriculum_large_all_dataset.sh``` meet your requirements, then run:
 ```
-sh run_train.sh
+sh run_train_curriculum_large_all_dataset.sh
 ```
 
-We also provide a training script run_train_curriculum.sh for curriculum learning, which progressively incorporates new datasets into the training process to accelerate model convergence.
+### Pycocotools Modifications
+By default, ```pycocotools``` only displays the mean Average Precision (mAP) averaged across all classes and limits the maximum number of objects per image to 100. If you need more detailed information, such as the AP for each individual class, and your images contain more than 100 objects, modifications to the library's source code are necessary. Below, we highlight the differences between the modified code and the original code.
+
+For coco.py:
+```python
+84a85
+>             print("category names: {}".format([e["name"] for e in sorted(dataset["categories"], key=lambda x: x["id"])]))
+426a428,429
+>             # print("###############################################")
+>             # print(segm)
+
+```
+
+For cocoeval.py:
+```python
+456c456,469
+<             print(iStr.format(titleStr, typeStr, iouStr, areaRng, maxDets, mean_s))
+---
+>             #print(iStr.format(titleStr, typeStr, iouStr, areaRng, maxDets, mean_s))
+>            
+>             category_dimension = 1 + int(ap)
+>             if s.shape[category_dimension] > 1:
+>                 iStr += ", per category = {}"
+>                 mean_axis = (0,)
+>                 if ap == 1:
+>                     mean_axis = (0, 1)
+>                 per_category_mean_s = np.mean(s, axis=mean_axis).flatten()
+>                 with np.printoptions(precision=3, suppress=True, sign=" ", floatmode="fixed"):
+>                     print(iStr.format(titleStr, typeStr, iouStr, areaRng, maxDets, mean_s, per_category_mean_s))
+>             else:
+>                 print(iStr.format(titleStr, typeStr, iouStr, areaRng, maxDets, mean_s, ""))
+> 
+460c473,474
+<             stats[0] = _summarize(1)
+---
+>             ### stats[0] = _summarize(1)
+>             stats[0] = _summarize(1, maxDets=self.params.maxDets[2])
+
+```
 
 
 ## Model Zoo
@@ -69,6 +110,7 @@ As an all-in-one model, DocSAM was pre-trained on nearly 50 datasets. We provide
 <th valign="bottom">#Parameter</th>
 <th valign="bottom">BatchSize</th>
 <th valign="bottom">#Iterations</th>
+<th valign="bottom">PatchSize</th>
 <th valign="bottom">Download</th>
 <!-- TABLE BODY -->
 <!-- ROW: docsam_base_all_dataset -->
@@ -78,6 +120,7 @@ As an all-in-one model, DocSAM was pre-trained on nearly 50 datasets. We provide
 <td align="center">208M</td>
 <td align="center">32</td>
 <td align="center">360k</td>
+<td align="center">640,640</td>
 <td align="center"><a href="https://drive.google.com/file/d/1M7Zc63eBGTKjynkmQ-2sI3m2WBvzqMO4/view?usp=drive_link">model</a></td>
 </tr>
 <!-- ROW: docsam_large_all_dataset -->
@@ -87,7 +130,18 @@ As an all-in-one model, DocSAM was pre-trained on nearly 50 datasets. We provide
 <td align="center">317M</td>
 <td align="center">32</td>
 <td align="center">360k</td>
+<td align="center">640,640</td>
 <td align="center"><a href="https://drive.google.com/file/d/1YvdDMtnDpfZTyxF59z3gbK2FKrfHaxJn/view?usp=drive_link">model</a></td>
+</tr>
+<!-- ROW: docsam_base_all_dataset_keepsize -->
+<tr>
+<td align="left">docsam_base_all_dataset_keepsize</td>
+<td align="center">swin-base</td>
+<td align="center">208M</td>
+<td align="center">32</td>
+<td align="center">360k</td>
+<td align="center">640,640</td>
+<td align="center"><a href="https://drive.google.com/file/d/15X9lLhPmQdDXnVQiuzB8G6kU13X2bBtP/view?usp=drive_link">model</a></td>
 </tr>
 <!-- ROW: docsam_large_m6doc -->
 <tr>
@@ -96,7 +150,18 @@ As an all-in-one model, DocSAM was pre-trained on nearly 50 datasets. We provide
 <td align="center">317M</td>
 <td align="center">16</td>
 <td align="center">40k</td>
-<td align="center"><a href="https://drive.google.com/file/d/1bs8DGooP5zAu2I8fNRqpdjSHCnT2kPNm/view?usp=drive_link">model</a></td>
+<td align="center">800,800</td>
+<td align="center"><a href="https://drive.google.com/file/d/1RhBTSIY8aox9WJyVTBDrfeldA7GEH-hu/view?usp=drive_link">model</a></td>
+</tr>
+<!-- ROW: docsam_large_doclaynet -->
+<tr>
+<td align="left">docsam_large_doclaynet</td>
+<td align="center">swin-large</td>
+<td align="center">317M</td>
+<td align="center">16</td>
+<td align="center">40k</td>
+<td align="center">800,800</td>
+<td align="center"><a href="https://drive.google.com/file/d/1pOmu6FkZK9j6f1KrGL33W9hGRmCxkYz4/view?usp=drive_link">model</a></td>
 </tr>
 <!-- ROW: docsam_large_scut_cab -->
 <tr>
@@ -105,7 +170,8 @@ As an all-in-one model, DocSAM was pre-trained on nearly 50 datasets. We provide
 <td align="center">317M</td>
 <td align="center">16</td>
 <td align="center">40k</td>
-<td align="center"><a href="https://drive.google.com/file/d/1BUmYz1jClnPfPycOSaNsB0jL3wM1qYCX/view?usp=drive_link">model</a></td>
+<td align="center">800,800</td>
+<td align="center"><a href="https://drive.google.com/file/d/1pR9Z9UPASLgGEdgq4SiT3CqNdtI_ZhEa/view?usp=drive_link">model</a></td>
 </tr>
 <!-- ROW: docsam_large_ctw1500 -->
 <tr>
@@ -114,6 +180,7 @@ As an all-in-one model, DocSAM was pre-trained on nearly 50 datasets. We provide
 <td align="center">317M</td>
 <td align="center">16</td>
 <td align="center">40k</td>
+<td align="center">800,800</td>
 <td align="center"><a href="https://drive.google.com/file/d/1kO6Pyk4h36fnVRzVQJ5cScfFkFMchqOd/view?usp=drive_link">model</a></td>
 </tr>
 <!-- ROW: docsam_large_totaltext -->
@@ -123,11 +190,20 @@ As an all-in-one model, DocSAM was pre-trained on nearly 50 datasets. We provide
 <td align="center">317M</td>
 <td align="center">16</td>
 <td align="center">40k</td>
+<td align="center">800,800</td>
 <td align="center"><a href="https://drive.google.com/file/d/1aiN_C9eHC0fRX27CPRu8Jfaz5DQiz83D/view?usp=drive_link">model</a></td>
 </tr>
 </tbody></table>
 
+#### Notice
 
+By default, during training, we randomly resize input images so that their shorter sides range between 704 and 896 pixels, and then randomly crop them into patches of size 640×640 pixels. While during testing and inference, we uniformly resize the input images to have a shorter side of 800 pixels and perform predictions in a sliding window manner.
+
+Additionally, we provide a model called ```docsam_base_all_dataset_keepsize```, which uses a different resizing method. This model retains the original sizes of the input images as much as possible, ensuring that the shorter sides are within the range of 640 to 1280 pixels.
+
+For fine-tuning on the M<sup>6</sup>Doc, DocLayNet, SCUT-CAB, CTW1500, and Total-Text datasets, we adopt a patch size of 800×800 pixels. This approach aims to prevent regions of interest from being fragmented across different patches.
+
+The original DocLayNet dataset resizes all images to a fixed size of 1025×1025 pixels, which may distort the aspect ratios of the documents. To better preserve the original aspect ratios, we have resized the images to 1025×1449 pixels before training and testing.
 
 
 ## License
@@ -150,9 +226,6 @@ If you find DocSAM helpful for your research or wish to refer to the baseline re
   year={2025}
 }
 ```
-
-
-
 
 ## Acknowledgement
 

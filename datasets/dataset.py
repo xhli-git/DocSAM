@@ -42,7 +42,7 @@ def PolygonToBBox(polygons):
 
 
 class DocSAM_GT(data.Dataset):
-    def __init__(self, data_paths, short_range=(704, 896), patch_size=(640, 640), patch_num=1, stage="train"):
+    def __init__(self, data_paths, short_range=(704, 896), patch_size=(640, 640), patch_num=1, keep_size=False, stage="train"):
         """
         Initializes the dataset.
         
@@ -58,6 +58,7 @@ class DocSAM_GT(data.Dataset):
         self.short_range = short_range
         self.patch_size = patch_size
         self.patch_num = patch_num
+        self.keep_size = keep_size
         self.stage = stage
 
         self.image_names = []
@@ -361,7 +362,7 @@ class DocSAM_GT(data.Dataset):
         return image, mask, coco_data
     
     
-    def _data_resize(self, image, mask, coco_data, dsize):
+    def _data_resize(self, image, mask, coco_data, dsize=None):
         """
         Resizes the input image, mask, and updates COCO annotations accordingly.
         
@@ -378,9 +379,25 @@ class DocSAM_GT(data.Dataset):
         """
 
         if dsize is not None:
-            image = F.interpolate(image[None], size=dsize, mode="area")[0]
-            mask = F.interpolate(mask[None], size=dsize, mode="nearest")[0]
-            coco_data = self._coco_data_reszie(coco_data, dsize)
+            hei, wid = dsize[-2], dsize[-1]
+            
+        elif self.keep_size:
+            hei, wid = image.shape[-2], image.shape[-1]
+            if self.stage == "train":
+                hei = round(hei * pow(2, random.uniform(-0.2, 0.2)))
+                wid = round(wid * pow(2, random.uniform(-0.2, 0.2)))
+
+            low, high = self.short_range
+            if min(hei, wid) < low:
+                scale = low / min(hei, wid)
+            elif min(hei, wid) > high:
+                scale = high / min(hei, wid)
+            else:
+                scale = 1.0
+                
+            hei, wid = round(hei * scale), round(wid * scale)
+            hei, wid = min(hei, min(hei, wid) * 2), min(wid, min(hei, wid) * 2)
+            
         else:
             low, high = self.short_range
             if self.stage == "train":
@@ -393,12 +410,13 @@ class DocSAM_GT(data.Dataset):
             scale = short_side / min(hei, wid)
             hei = min(round(hei * scale), max_long_side)
             wid = min(round(wid * scale), max_long_side)
-            image = F.interpolate(image[None], size=(hei, wid), mode="area")[0]
-            mask = F.interpolate(mask[None], size=(hei, wid), mode="nearest")[0]
-            coco_data = self._coco_data_reszie(coco_data, (hei, wid))
+            
+        image = F.interpolate(image[None], size=(hei, wid), mode="area")[0]
+        mask = F.interpolate(mask[None], size=(hei, wid), mode="nearest")[0]
+        coco_data = self._coco_data_reszie(coco_data, (hei, wid))
             
         return image, mask, coco_data
-    
+
 
     def _generate_mask(self, coco_data):
         """

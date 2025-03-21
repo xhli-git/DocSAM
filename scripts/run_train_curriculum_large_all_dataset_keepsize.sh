@@ -151,26 +151,165 @@ TRAIN_PATH_79=${DATA_PATH}/SceneText/ShopSign/data/ShopSign_1265/
 TRAIN_PATH_80=${DATA_PATH}/SceneText/Total-Text/data/TotalText/train/
 TRAIN_PATH_81=${DATA_PATH}/SceneText/USTB-SV1K/data/USTB-SV1K/train/
 
-# Training settings. You can modify them to fit your own resources.
+
+
+# stage 1: adding layout data
 MODEL_SIZE=large
 SAVE_PATH=./outputs/outputs_train/
 MAX_NUM=10
 
-BATCH_SIZE=12
-LEARNING_RATE=2e-5
+SHORT_RANGE=704,896
+PATCH_SIZE=640,640
+PATCH_NUM=1
+KEEP_SIZE=False
+
+BATCH_SIZE=32
+LEARNING_RATE=1e-4
 MOMENTUM=0.9
 WEIGHT_DECAY=1e-2
-LR_SCHEDULER=cosine
+LR_SCHEDULER=fix
 
 FINE_TUNE=False
 RESTORE_FROM=./snapshots/last_model.pth
 SNAPSHOT_DIR=./snapshots/
 START_ITER=0
-TOTAL_ITER=360000
-GPU_IDS=0,1,2,3
+TOTAL_ITER=4000
+GPU_IDS=0,1,2,3,4,5,6,7
 
 export OMP_NUM_THREADS=1
-CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun --rdzv_backend=c10d --rdzv_endpoint=localhost:0 --nnodes=1 --nproc_per_node=4 train.py \
+CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun --rdzv_backend=c10d --rdzv_endpoint=localhost:0 --nnodes=1 --nproc_per_node=8 train.py \
+    --train-path ${TRAIN_PATH_00} ${TRAIN_PATH_01} ${TRAIN_PATH_02} ${TRAIN_PATH_03} ${TRAIN_PATH_04} ${TRAIN_PATH_05} ${TRAIN_PATH_06} ${TRAIN_PATH_07} ${TRAIN_PATH_08} ${TRAIN_PATH_09} \
+    --eval-path ${EVAL_PATH_00} ${EVAL_PATH_01} ${EVAL_PATH_02} ${EVAL_PATH_03} ${EVAL_PATH_04} ${EVAL_PATH_05} ${EVAL_PATH_06} ${EVAL_PATH_07} ${EVAL_PATH_08} ${EVAL_PATH_09} \
+        ${EVAL_PATH_20} ${EVAL_PATH_21} ${EVAL_PATH_22} ${EVAL_PATH_23} ${EVAL_PATH_24} ${EVAL_PATH_25} ${EVAL_PATH_26} ${EVAL_PATH_27} \
+        ${EVAL_PATH_30} ${EVAL_PATH_31} \
+        ${EVAL_PATH_40} ${EVAL_PATH_41} ${EVAL_PATH_42} ${EVAL_PATH_43} ${EVAL_PATH_44} ${EVAL_PATH_45} ${EVAL_PATH_46} ${EVAL_PATH_47} ${EVAL_PATH_48} ${EVAL_PATH_49} \
+        ${EVAL_PATH_50} ${EVAL_PATH_51} ${EVAL_PATH_52} ${EVAL_PATH_53} ${EVAL_PATH_54} ${EVAL_PATH_55} ${EVAL_PATH_56} \
+        ${EVAL_PATH_60} ${EVAL_PATH_61} ${EVAL_PATH_62} ${EVAL_PATH_63} ${EVAL_PATH_64} ${EVAL_PATH_65} ${EVAL_PATH_66} ${EVAL_PATH_67} ${EVAL_PATH_68} ${EVAL_PATH_69} \
+        ${EVAL_PATH_70} ${EVAL_PATH_71} ${EVAL_PATH_72} ${EVAL_PATH_73} ${EVAL_PATH_74} ${EVAL_PATH_75} ${EVAL_PATH_76} ${EVAL_PATH_77} ${EVAL_PATH_78} ${EVAL_PATH_79} \
+        ${EVAL_PATH_80} ${EVAL_PATH_81} \
+    --model-size ${MODEL_SIZE} --save-path ${SAVE_PATH} --max-num ${MAX_NUM} \
+    --short-range ${SHORT_RANGE} --patch-size ${PATCH_SIZE} --patch-num ${PATCH_NUM} --keep-size ${KEEP_SIZE} \
+    --batch-size ${BATCH_SIZE} --learning-rate ${LEARNING_RATE} --momentum ${MOMENTUM} --weight-decay ${WEIGHT_DECAY} --lr-scheduler ${LR_SCHEDULER} \
+    --fine-tune ${FINE_TUNE} --restore-from ${RESTORE_FROM} --snapshot-dir ${SNAPSHOT_DIR} \
+    --start-iter ${START_ITER} --total-iter ${TOTAL_ITER} --gpus ${GPU_IDS}
+wait $!
+
+
+# stage 2: adding ancient and handwritten data
+MODEL_SIZE=large
+SAVE_PATH=./outputs/outputs_train/
+MAX_NUM=10
+
+SHORT_RANGE=704,896
+PATCH_SIZE=640,640
+PATCH_NUM=1
+KEEP_SIZE=False
+
+BATCH_SIZE=32
+LEARNING_RATE=1e-4
+MOMENTUM=0.9
+WEIGHT_DECAY=1e-2
+LR_SCHEDULER=fix
+
+FINE_TUNE=True
+RESTORE_FROM=./snapshots/last_model.pth
+SNAPSHOT_DIR=./snapshots/
+START_ITER=0
+TOTAL_ITER=4000
+GPU_IDS=0,1,2,3,4,5,6,7
+
+export OMP_NUM_THREADS=1
+CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun --rdzv_backend=c10d --rdzv_endpoint=localhost:0 --nnodes=1 --nproc_per_node=8 train.py \
+    --train-path ${TRAIN_PATH_00} ${TRAIN_PATH_01} ${TRAIN_PATH_02} ${TRAIN_PATH_03} ${TRAIN_PATH_04} ${TRAIN_PATH_05} ${TRAIN_PATH_06} ${TRAIN_PATH_07} ${TRAIN_PATH_08} ${TRAIN_PATH_09} \
+        ${TRAIN_PATH_20} ${TRAIN_PATH_21} ${TRAIN_PATH_22} ${TRAIN_PATH_23} ${TRAIN_PATH_24} ${TRAIN_PATH_25} ${TRAIN_PATH_26} ${TRAIN_PATH_27} \
+        ${TRAIN_PATH_30} ${TRAIN_PATH_31} \
+    --eval-path ${EVAL_PATH_00} ${EVAL_PATH_01} ${EVAL_PATH_02} ${EVAL_PATH_03} ${EVAL_PATH_04} ${EVAL_PATH_05} ${EVAL_PATH_06} ${EVAL_PATH_07} ${EVAL_PATH_08} ${EVAL_PATH_09} \
+        ${EVAL_PATH_20} ${EVAL_PATH_21} ${EVAL_PATH_22} ${EVAL_PATH_23} ${EVAL_PATH_24} ${EVAL_PATH_25} ${EVAL_PATH_26} ${EVAL_PATH_27} \
+        ${EVAL_PATH_30} ${EVAL_PATH_31} \
+        ${EVAL_PATH_40} ${EVAL_PATH_41} ${EVAL_PATH_42} ${EVAL_PATH_43} ${EVAL_PATH_44} ${EVAL_PATH_45} ${EVAL_PATH_46} ${EVAL_PATH_47} ${EVAL_PATH_48} ${EVAL_PATH_49} \
+        ${EVAL_PATH_50} ${EVAL_PATH_51} ${EVAL_PATH_52} ${EVAL_PATH_53} ${EVAL_PATH_54} ${EVAL_PATH_55} ${EVAL_PATH_56} \
+        ${EVAL_PATH_60} ${EVAL_PATH_61} ${EVAL_PATH_62} ${EVAL_PATH_63} ${EVAL_PATH_64} ${EVAL_PATH_65} ${EVAL_PATH_66} ${EVAL_PATH_67} ${EVAL_PATH_68} ${EVAL_PATH_69} \
+        ${EVAL_PATH_70} ${EVAL_PATH_71} ${EVAL_PATH_72} ${EVAL_PATH_73} ${EVAL_PATH_74} ${EVAL_PATH_75} ${EVAL_PATH_76} ${EVAL_PATH_77} ${EVAL_PATH_78} ${EVAL_PATH_79} \
+        ${EVAL_PATH_80} ${EVAL_PATH_81} \
+    --model-size ${MODEL_SIZE} --save-path ${SAVE_PATH} --max-num ${MAX_NUM} \
+    --short-range ${SHORT_RANGE} --patch-size ${PATCH_SIZE} --patch-num ${PATCH_NUM} --keep-size ${KEEP_SIZE} \
+    --batch-size ${BATCH_SIZE} --learning-rate ${LEARNING_RATE} --momentum ${MOMENTUM} --weight-decay ${WEIGHT_DECAY} --lr-scheduler ${LR_SCHEDULER} \
+    --fine-tune ${FINE_TUNE} --restore-from ${RESTORE_FROM} --snapshot-dir ${SNAPSHOT_DIR} \
+    --start-iter ${START_ITER} --total-iter ${TOTAL_ITER} --gpus ${GPU_IDS}
+wait $!
+
+
+# stage 3: adding table data
+MODEL_SIZE=large
+SAVE_PATH=./outputs/outputs_train/
+MAX_NUM=10
+
+SHORT_RANGE=704,896
+PATCH_SIZE=640,640
+PATCH_NUM=1
+KEEP_SIZE=False
+
+BATCH_SIZE=32
+LEARNING_RATE=1e-4
+MOMENTUM=0.9
+WEIGHT_DECAY=1e-2
+LR_SCHEDULER=fix
+
+FINE_TUNE=True
+RESTORE_FROM=./snapshots/last_model.pth
+SNAPSHOT_DIR=./snapshots/
+START_ITER=0
+TOTAL_ITER=4000
+GPU_IDS=0,1,2,3,4,5,6,7
+
+export OMP_NUM_THREADS=1
+CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun --rdzv_backend=c10d --rdzv_endpoint=localhost:0 --nnodes=1 --nproc_per_node=8 train.py \
+    --train-path ${TRAIN_PATH_00} ${TRAIN_PATH_01} ${TRAIN_PATH_02} ${TRAIN_PATH_03} ${TRAIN_PATH_04} ${TRAIN_PATH_05} ${TRAIN_PATH_06} ${TRAIN_PATH_07} ${TRAIN_PATH_08} ${TRAIN_PATH_09} \
+        ${TRAIN_PATH_20} ${TRAIN_PATH_21} ${TRAIN_PATH_22} ${TRAIN_PATH_23} ${TRAIN_PATH_24} ${TRAIN_PATH_25} ${TRAIN_PATH_26} ${TRAIN_PATH_27} \
+        ${TRAIN_PATH_30} ${TRAIN_PATH_31} \
+        ${TRAIN_PATH_40} ${TRAIN_PATH_41} ${TRAIN_PATH_42} ${TRAIN_PATH_43} ${TRAIN_PATH_44} ${TRAIN_PATH_45} ${TRAIN_PATH_46} ${TRAIN_PATH_47} ${TRAIN_PATH_48} ${TRAIN_PATH_49} \
+        ${TRAIN_PATH_50} ${TRAIN_PATH_51} ${TRAIN_PATH_52} ${TRAIN_PATH_53} ${TRAIN_PATH_54} ${TRAIN_PATH_55} ${TRAIN_PATH_56} \
+    --eval-path ${EVAL_PATH_00} ${EVAL_PATH_01} ${EVAL_PATH_02} ${EVAL_PATH_03} ${EVAL_PATH_04} ${EVAL_PATH_05} ${EVAL_PATH_06} ${EVAL_PATH_07} ${EVAL_PATH_08} ${EVAL_PATH_09} \
+        ${EVAL_PATH_20} ${EVAL_PATH_21} ${EVAL_PATH_22} ${EVAL_PATH_23} ${EVAL_PATH_24} ${EVAL_PATH_25} ${EVAL_PATH_26} ${EVAL_PATH_27} \
+        ${EVAL_PATH_30} ${EVAL_PATH_31} \
+        ${EVAL_PATH_40} ${EVAL_PATH_41} ${EVAL_PATH_42} ${EVAL_PATH_43} ${EVAL_PATH_44} ${EVAL_PATH_45} ${EVAL_PATH_46} ${EVAL_PATH_47} ${EVAL_PATH_48} ${EVAL_PATH_49} \
+        ${EVAL_PATH_50} ${EVAL_PATH_51} ${EVAL_PATH_52} ${EVAL_PATH_53} ${EVAL_PATH_54} ${EVAL_PATH_55} ${EVAL_PATH_56} \
+        ${EVAL_PATH_60} ${EVAL_PATH_61} ${EVAL_PATH_62} ${EVAL_PATH_63} ${EVAL_PATH_64} ${EVAL_PATH_65} ${EVAL_PATH_66} ${EVAL_PATH_67} ${EVAL_PATH_68} ${EVAL_PATH_69} \
+        ${EVAL_PATH_70} ${EVAL_PATH_71} ${EVAL_PATH_72} ${EVAL_PATH_73} ${EVAL_PATH_74} ${EVAL_PATH_75} ${EVAL_PATH_76} ${EVAL_PATH_77} ${EVAL_PATH_78} ${EVAL_PATH_79} \
+        ${EVAL_PATH_80} ${EVAL_PATH_81} \
+    --model-size ${MODEL_SIZE} --save-path ${SAVE_PATH} --max-num ${MAX_NUM} \
+    --short-range ${SHORT_RANGE} --patch-size ${PATCH_SIZE} --patch-num ${PATCH_NUM} --keep-size ${KEEP_SIZE} \
+    --batch-size ${BATCH_SIZE} --learning-rate ${LEARNING_RATE} --momentum ${MOMENTUM} --weight-decay ${WEIGHT_DECAY} --lr-scheduler ${LR_SCHEDULER} \
+    --fine-tune ${FINE_TUNE} --restore-from ${RESTORE_FROM} --snapshot-dir ${SNAPSHOT_DIR} \
+    --start-iter ${START_ITER} --total-iter ${TOTAL_ITER} --gpus ${GPU_IDS}
+wait $!
+        
+
+# stage 4: adding scene text data
+MODEL_SIZE=large
+SAVE_PATH=./outputs/outputs_train/
+MAX_NUM=10
+
+SHORT_RANGE=704,896
+PATCH_SIZE=640,640
+PATCH_NUM=1
+KEEP_SIZE=False
+
+BATCH_SIZE=32
+LEARNING_RATE=1e-4
+MOMENTUM=0.9
+WEIGHT_DECAY=1e-2
+LR_SCHEDULER=fix
+
+FINE_TUNE=True
+RESTORE_FROM=./snapshots/last_model.pth
+SNAPSHOT_DIR=./snapshots/
+START_ITER=0
+TOTAL_ITER=4000
+GPU_IDS=0,1,2,3,4,5,6,7
+
+export OMP_NUM_THREADS=1
+CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun --rdzv_backend=c10d --rdzv_endpoint=localhost:0 --nnodes=1 --nproc_per_node=8 train.py \
     --train-path ${TRAIN_PATH_00} ${TRAIN_PATH_01} ${TRAIN_PATH_02} ${TRAIN_PATH_03} ${TRAIN_PATH_04} ${TRAIN_PATH_05} ${TRAIN_PATH_06} ${TRAIN_PATH_07} ${TRAIN_PATH_08} ${TRAIN_PATH_09} \
         ${TRAIN_PATH_20} ${TRAIN_PATH_21} ${TRAIN_PATH_22} ${TRAIN_PATH_23} ${TRAIN_PATH_24} ${TRAIN_PATH_25} ${TRAIN_PATH_26} ${TRAIN_PATH_27} \
         ${TRAIN_PATH_30} ${TRAIN_PATH_31} \
@@ -187,8 +326,59 @@ CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun --rdzv_backend=c10d --rdzv_endpoint=loc
         ${EVAL_PATH_60} ${EVAL_PATH_61} ${EVAL_PATH_62} ${EVAL_PATH_63} ${EVAL_PATH_64} ${EVAL_PATH_65} ${EVAL_PATH_66} ${EVAL_PATH_67} ${EVAL_PATH_68} ${EVAL_PATH_69} \
         ${EVAL_PATH_70} ${EVAL_PATH_71} ${EVAL_PATH_72} ${EVAL_PATH_73} ${EVAL_PATH_74} ${EVAL_PATH_75} ${EVAL_PATH_76} ${EVAL_PATH_77} ${EVAL_PATH_78} ${EVAL_PATH_79} \
         ${EVAL_PATH_80} ${EVAL_PATH_81} \
+    --model-size ${MODEL_SIZE} --save-path ${SAVE_PATH} --max-num ${MAX_NUM} \
+    --short-range ${SHORT_RANGE} --patch-size ${PATCH_SIZE} --patch-num ${PATCH_NUM} --keep-size ${KEEP_SIZE} \
     --batch-size ${BATCH_SIZE} --learning-rate ${LEARNING_RATE} --momentum ${MOMENTUM} --weight-decay ${WEIGHT_DECAY} --lr-scheduler ${LR_SCHEDULER} \
     --fine-tune ${FINE_TUNE} --restore-from ${RESTORE_FROM} --snapshot-dir ${SNAPSHOT_DIR} \
-    --start-iter ${START_ITER} --total-iter ${TOTAL_ITER} --gpus ${GPU_IDS} \
-    --model-size ${MODEL_SIZE} --save-path ${SAVE_PATH} --max-num ${MAX_NUM}
-        
+    --start-iter ${START_ITER} --total-iter ${TOTAL_ITER} --gpus ${GPU_IDS}
+wait $!
+ 
+
+# stage 5: full size training
+MODEL_SIZE=large
+SAVE_PATH=./outputs/outputs_train/
+MAX_NUM=10
+
+SHORT_RANGE=704,896
+PATCH_SIZE=640,640
+PATCH_NUM=1
+KEEP_SIZE=False
+
+BATCH_SIZE=32
+LEARNING_RATE=1e-4
+MOMENTUM=0.9
+WEIGHT_DECAY=1e-2
+LR_SCHEDULER=cosine
+
+FINE_TUNE=True
+RESTORE_FROM=./snapshots/last_model.pth
+SNAPSHOT_DIR=./snapshots/
+START_ITER=0
+TOTAL_ITER=360000
+GPU_IDS=0,1,2,3,4,5,6,7
+
+export OMP_NUM_THREADS=1
+CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun --rdzv_backend=c10d --rdzv_endpoint=localhost:0 --nnodes=1 --nproc_per_node=8 train.py \
+    --train-path ${TRAIN_PATH_00} ${TRAIN_PATH_01} ${TRAIN_PATH_02} ${TRAIN_PATH_03} ${TRAIN_PATH_04} ${TRAIN_PATH_05} ${TRAIN_PATH_06} ${TRAIN_PATH_07} ${TRAIN_PATH_08} ${TRAIN_PATH_09} \
+        ${TRAIN_PATH_20} ${TRAIN_PATH_21} ${TRAIN_PATH_22} ${TRAIN_PATH_23} ${TRAIN_PATH_24} ${TRAIN_PATH_25} ${TRAIN_PATH_26} ${TRAIN_PATH_27} \
+        ${TRAIN_PATH_30} ${TRAIN_PATH_31} \
+        ${TRAIN_PATH_40} ${TRAIN_PATH_41} ${TRAIN_PATH_42} ${TRAIN_PATH_43} ${TRAIN_PATH_44} ${TRAIN_PATH_45} ${TRAIN_PATH_46} ${TRAIN_PATH_47} ${TRAIN_PATH_48} ${TRAIN_PATH_49} \
+        ${TRAIN_PATH_50} ${TRAIN_PATH_51} ${TRAIN_PATH_52} ${TRAIN_PATH_53} ${TRAIN_PATH_54} ${TRAIN_PATH_55} ${TRAIN_PATH_56} \
+        ${TRAIN_PATH_60} ${TRAIN_PATH_61} ${TRAIN_PATH_62} ${TRAIN_PATH_63} ${TRAIN_PATH_64} ${TRAIN_PATH_65} ${TRAIN_PATH_66} ${TRAIN_PATH_67} ${TRAIN_PATH_68} ${TRAIN_PATH_69} \
+        ${TRAIN_PATH_70} ${TRAIN_PATH_71} ${TRAIN_PATH_72} ${TRAIN_PATH_73} ${TRAIN_PATH_74} ${TRAIN_PATH_75} ${TRAIN_PATH_76} ${TRAIN_PATH_77} ${TRAIN_PATH_78} ${TRAIN_PATH_79} \
+        ${TRAIN_PATH_80} ${TRAIN_PATH_81} \
+    --eval-path ${EVAL_PATH_00} ${EVAL_PATH_01} ${EVAL_PATH_02} ${EVAL_PATH_03} ${EVAL_PATH_04} ${EVAL_PATH_05} ${EVAL_PATH_06} ${EVAL_PATH_07} ${EVAL_PATH_08} ${EVAL_PATH_09} \
+        ${EVAL_PATH_20} ${EVAL_PATH_21} ${EVAL_PATH_22} ${EVAL_PATH_23} ${EVAL_PATH_24} ${EVAL_PATH_25} ${EVAL_PATH_26} ${EVAL_PATH_27} \
+        ${EVAL_PATH_30} ${EVAL_PATH_31} \
+        ${EVAL_PATH_40} ${EVAL_PATH_41} ${EVAL_PATH_42} ${EVAL_PATH_43} ${EVAL_PATH_44} ${EVAL_PATH_45} ${EVAL_PATH_46} ${EVAL_PATH_47} ${EVAL_PATH_48} ${EVAL_PATH_49} \
+        ${EVAL_PATH_50} ${EVAL_PATH_51} ${EVAL_PATH_52} ${EVAL_PATH_53} ${EVAL_PATH_54} ${EVAL_PATH_55} ${EVAL_PATH_56} \
+        ${EVAL_PATH_60} ${EVAL_PATH_61} ${EVAL_PATH_62} ${EVAL_PATH_63} ${EVAL_PATH_64} ${EVAL_PATH_65} ${EVAL_PATH_66} ${EVAL_PATH_67} ${EVAL_PATH_68} ${EVAL_PATH_69} \
+        ${EVAL_PATH_70} ${EVAL_PATH_71} ${EVAL_PATH_72} ${EVAL_PATH_73} ${EVAL_PATH_74} ${EVAL_PATH_75} ${EVAL_PATH_76} ${EVAL_PATH_77} ${EVAL_PATH_78} ${EVAL_PATH_79} \
+        ${EVAL_PATH_80} ${EVAL_PATH_81} \
+    --model-size ${MODEL_SIZE} --save-path ${SAVE_PATH} --max-num ${MAX_NUM} \
+    --short-range ${SHORT_RANGE} --patch-size ${PATCH_SIZE} --patch-num ${PATCH_NUM} --keep-size ${KEEP_SIZE} \
+    --batch-size ${BATCH_SIZE} --learning-rate ${LEARNING_RATE} --momentum ${MOMENTUM} --weight-decay ${WEIGHT_DECAY} --lr-scheduler ${LR_SCHEDULER} \
+    --fine-tune ${FINE_TUNE} --restore-from ${RESTORE_FROM} --snapshot-dir ${SNAPSHOT_DIR} \
+    --start-iter ${START_ITER} --total-iter ${TOTAL_ITER} --gpus ${GPU_IDS}
+
+wait $!

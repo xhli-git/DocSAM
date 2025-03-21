@@ -51,6 +51,11 @@ MODEL_SIZE=large
 SAVE_PATH=./outputs/outputs_train/
 MAX_NUM=10
 
+SHORT_RANGE=704,896
+PATCH_SIZE=640,640
+PATCH_NUM=1
+KEEP_SIZE=False
+
 BATCH_SIZE=4
 LEARNING_RATE=2e-5
 MOMENTUM=0.9
@@ -68,8 +73,9 @@ export OMP_NUM_THREADS=1
 CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun --rdzv_backend=c10d --rdzv_endpoint=localhost:0 --nnodes=1 --nproc_per_node=2 train.py \
     --train-path ${TRAIN_PATH_0} ${TRAIN_PATH_1} ${TRAIN_PATH_2} ${TRAIN_PATH_3} ${TRAIN_PATH_4} ${TRAIN_PATH_5} ${TRAIN_PATH_6} \
     --eval-path ${EVAL_PATH_0} ${EVAL_PATH_1} ${EVAL_PATH_2} ${EVAL_PATH_3} ${EVAL_PATH_4} ${EVAL_PATH_5} ${EVAL_PATH_6} \
+    --model-size ${MODEL_SIZE} --save-path ${SAVE_PATH} --max-num ${MAX_NUM} \
+    --short-range ${SHORT_RANGE} --patch-size ${PATCH_SIZE} --patch-num ${PATCH_NUM} --keep-size ${KEEP_SIZE} \
     --batch-size ${BATCH_SIZE} --learning-rate ${LEARNING_RATE} --momentum ${MOMENTUM} --weight-decay ${WEIGHT_DECAY} --lr-scheduler ${LR_SCHEDULER} \
     --fine-tune ${FINE_TUNE} --restore-from ${RESTORE_FROM} --snapshot-dir ${SNAPSHOT_DIR} \
-    --start-iter ${START_ITER} --total-iter ${TOTAL_ITER} --gpus ${GPU_IDS} \
-    --model-size ${MODEL_SIZE} --save-path ${SAVE_PATH} --max-num ${MAX_NUM}
+    --start-iter ${START_ITER} --total-iter ${TOTAL_ITER} --gpus ${GPU_IDS}
         

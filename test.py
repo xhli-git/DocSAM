@@ -32,12 +32,49 @@ from prefetch_generator import BackgroundGenerator
 from datasets.dataset import DocSAM_GT
 from models.DocSAM import DocSAM 
 
+STAGE = "test"
 MODEL_SIZE = "base"
 SAVE_PATH = './outputs/outputs_test/'
+
+SHORT_RANGE = (704, 896)
+PATCH_SIZE = (640, 640)
+PATCH_NUM = 1
+KEEP_SIZE = False
+MAX_NUM = 10
+
 MAX_NUM = 10
 BATCH_SIZE = 1
 RESTORE_FROM = './snapshots/last_model.pth'
 GPU_IDS = '0'
+
+
+def str2bool(input_str):
+    """
+    Converts string input to boolean.
+
+    Args:
+        input_str (str): String representation of a boolean value.
+
+    Returns:
+        bool: Converted boolean value.
+    """
+    
+    if input_str.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif input_str.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def parse_tuple(input_str):
+    try:
+        parsed_tuple = tuple(map(int, input_str.split(',')))
+        if len(parsed_tuple) != 2:
+            raise ValueError
+        return parsed_tuple
+    except ValueError:
+        raise argparse.ArgumentTypeError("Input must be two integers separated by a comma (e.g., '1,2')")
 
 
 def get_arguments():
@@ -53,7 +90,13 @@ def get_arguments():
     parser.add_argument('--model-size', type=str, default=MODEL_SIZE, help='Model size: tiny, small, base, large.') 
     parser.add_argument("--eval-path", type=str, nargs='+', help='A list of evaluation paths')
     parser.add_argument("--save-path", type=str, default=SAVE_PATH, help='Path to save outputs')
+    
+    parser.add_argument("--short-range", type=parse_tuple, default=SHORT_RANGE, help='Short side range')
+    parser.add_argument("--patch-size", type=parse_tuple, default=PATCH_SIZE, help='Patch size sampled from each image during training')
+    parser.add_argument("--patch-num", type=int, default=PATCH_NUM, help='Patch number')
+    parser.add_argument("--keep-size", type=str2bool, default=KEEP_SIZE, help='Whether to keep original image size')
     parser.add_argument('--max-num', type=int, default=MAX_NUM, help='Max image num for evaluation.') 
+
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE, help='Batch size for processing')
     parser.add_argument("--restore-from", type=str, default=RESTORE_FROM, help='Path to restore model from')
     parser.add_argument("--gpus", type=str, default=GPU_IDS, help='Comma-separated GPU IDs')
@@ -72,6 +115,15 @@ def MakePath(path):
     if not os.path.exists(os.path.dirname(path)):
         os.makedirs(os.path.dirname(path))
         return
+
+
+class DataLoaderX(DataLoader):
+    """
+    Custom DataLoader that uses a background generator to load data asynchronously.
+    """
+    
+    def __iter__(self):
+        return BackgroundGenerator(super().__iter__())
 
 
 def get_instance_palette(num_cls=2):
@@ -757,7 +809,7 @@ def predict_slide_window(model, batch, patch_size, layer_idx=-1):
     return batch_results
 
 
-def evaluate(model, dataloader, max_num=5, save_path=None, stage="test"):
+def evaluate(args, model, dataloader, max_num=5, save_path=None, stage="test"):
     """
     Evaluates a model on a dataset using provided dataloader. It supports saving predictions and computing evaluation metrics.
 
@@ -831,7 +883,7 @@ def evaluate(model, dataloader, max_num=5, save_path=None, stage="test"):
             if stage == "train":
                 batch_results = predict_whole(model, batch)
             else:
-                batch_results = predict_slide_window(model, batch, patch_size=(640, 640))
+                batch_results = predict_slide_window(model, batch, patch_size=args.patch_size)
 
             loss += outputs["loss"].item() if "loss" in batch_results else 0
             
@@ -1054,7 +1106,7 @@ def evaluate(model, dataloader, max_num=5, save_path=None, stage="test"):
     return loss, bbox_mAP, mask_mAP, mask_mF1, mIoU
 
 
-def inference(model, data_path, max_num=5, save_path=None, stage="test"):
+def inference(args, model, data_path, max_num=5, save_path=None, stage="test"):
     """
     Inference on provided images and save predictions.
 
@@ -1113,14 +1165,14 @@ def inference(model, data_path, max_num=5, save_path=None, stage="test"):
             batch["img_bboxes"]   = img_bboxes
             batch["class_names"]  = [class_names]
             
-            results = predict_slide_window(model, batch, patch_size=(640, 640))[0]
+            results = predict_slide_window(model, batch, patch_size=args.patch_size)[0]
             
             instance_palette = get_instance_palette(5000)
             semantic_palette = get_instance_palette(len(class_names) + 2)
             labels = [i+1 for i in range(len(class_names))]  # Labels start from 1
             
             # Save the original image
-            datasets = class_names[-1].replace("_background_", "")
+            datasets = class_names[-1].replace(" _background_", "")
             save_name = os.path.join(datasets, os.path.splitext(image_name)[0])
             
             MakePath(os.path.join(save_path, save_name + ".jpg"))
@@ -1193,16 +1245,7 @@ def inference(model, data_path, max_num=5, save_path=None, stage="test"):
     return
 
 
-class DataLoaderX(DataLoader):
-    """
-    Custom DataLoader that uses a background generator to load data asynchronously.
-    """
-    
-    def __iter__(self):
-        return BackgroundGenerator(super().__iter__())
-
-
-def test(model, args, max_num=5, stage="test"):
+def test(args, model, max_num=5, stage="test"):
     """
     Function to test a model on a given dataset.
     
@@ -1239,11 +1282,11 @@ def test(model, args, max_num=5, stage="test"):
         datas.append(data)
 
         # Prepare the test dataset and loader
-        test_set = DocSAM_GT([data_path], short_range=(704, 896), patch_size=(640, 640), patch_num=1, stage=stage)
+        test_set = DocSAM_GT([data_path], short_range=args.short_range, patch_size=args.patch_size, patch_num=args.patch_num, keep_size=args.keep_size, stage=stage)
         test_loader = DataLoaderX(test_set, batch_size=1, shuffle=False, num_workers=0, pin_memory=True, collate_fn=test_set.collate_fn)
         
         # Evaluate the model on the current dataset and collect metrics
-        loss, bbox_mAP, mask_mAP, mask_mF1, mIoU = evaluate(model, test_loader, max_num, save_path=args.save_path, stage=stage)
+        loss, bbox_mAP, mask_mAP, mask_mF1, mIoU = evaluate(args, model, test_loader, max_num, save_path=args.save_path, stage=stage)
         losses.append(loss)
         bbox_mAPs.append(bbox_mAP)
         mask_mAPs.append(mask_mAP)
@@ -1344,13 +1387,13 @@ if __name__ == '__main__':
     # Evaluate the model using the test() function. It takes the model, arguments, maximum number of images to process, and the stage.
     if args.stage == "test":
         print(args.eval_path)
-        mean_loss, mean_bbox_mAP, mean_mask_mAP, mean_mask_mF1, mean_mIoU = test(model, args, max_num=args.max_num, stage="test")
+        mean_loss, mean_bbox_mAP, mean_mask_mAP, mean_mask_mF1, mean_mIoU = test(args, model, max_num=args.max_num, stage="test")
         print("mean_loss:", mean_loss, "mean_bbox_mAP:", mean_bbox_mAP, "mean_mask_mAP:", mean_mask_mAP, "mean_mask_mF1:", mean_mask_mF1, "mean_mIoU:", mean_mIoU)
         
     elif args.stage == "inference":
         print(args.eval_path)
         for data_path in args.eval_path:
-            inference(model, data_path, max_num=args.max_num, save_path=args.save_path, stage="test")
+            inference(args, model, data_path, max_num=args.max_num, save_path=args.save_path, stage="test")
 
     # Record the end time and calculate the total execution time.
     end = timeit.default_timer()
