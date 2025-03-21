@@ -1,3 +1,6 @@
 data/
+logs/
+outputs/
 pretrained_model/
 snapshots/
+temp/
