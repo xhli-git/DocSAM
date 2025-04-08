@@ -51,7 +51,7 @@ class DocSAM_GT(data.Dataset):
         - short_range: tuple, range for resizing the shorter side of images.
         - patch_size: tuple, size of patches to extract (height, width).
         - patch_num: int, number of patches to sample per image.
-        - stage: str, specifies whether it's 'train' or 'val' phase.
+        - stage: str, specifies whether it's 'train', 'test' or 'inference' phase.
         """
         
         self.data_paths = data_paths
@@ -64,37 +64,45 @@ class DocSAM_GT(data.Dataset):
         self.image_names = []
         for data_path in self.data_paths:
             data_list = os.path.join(data_path, "list.txt")
-            if stage == "train":
-                if os.path.exists(os.path.join(data_path, "list_train.txt")):
-                    data_list = os.path.join(data_path, "list_train.txt")
-            else:
-                if os.path.exists(os.path.join(data_path, "list_val.txt")):
-                    data_list = os.path.join(data_path, "list_val.txt")
+            if stage == "train" and os.path.exists(os.path.join(data_path, "list_train.txt")):
+                data_list = os.path.join(data_path, "list_train.txt")
+            elif stage == "test" and os.path.exists(os.path.join(data_path, "list_val.txt")):
+                data_list = os.path.join(data_path, "list_val.txt")
             self.image_names.append([item.strip() for item in open(data_list, encoding='utf-8')])
                 
-        # Change according to your data path.
-        self.datasets = ["" for item in self.data_paths]
-        self.subdatas = ["" for item in self.data_paths]
+        self.dataset_names = self._get_dataset_names(self.data_paths)
         
-        for idx, data_path in enumerate(self.data_paths):
-            segs = data_path.split("/")
-            for s, seg in enumerate(segs):
-                if seg in set(["Ancient", "Handwritten", "Layout", "SceneText", "Table"]):
-                    self.datasets[idx] = segs[s+1]
-                if seg in set(["train", "test", "val"]):
-                    self.subdatas[idx] = segs[s-1]
-
-        self.dataset_sampling_probabilities = self._class_num_of_each_dataset(self.data_paths, self.image_names)
-
+        if self.stage == "train":
+            self.dataset_sampling_probabilities = self._class_num_of_each_dataset(self.data_paths, self.image_names)
+        else:
+            self.dataset_sampling_probabilities = [1.0 / len(self.data_paths) for _ in self.data_paths]
+            
         print("Image number of each dataset:", [len(item) for item in self.image_names])
         
-
         
     def __len__(self):
         """Returns the max number of images available."""
         return max([len(item) for item in self.image_names]) * len(self.image_names)
         
+        
+    def _get_dataset_names(self, data_paths):
+        # Change according to your data path.
+        datasets = ["" for item in self.data_paths]
+        subdatas = ["" for item in self.data_paths]
+        
+        for idx, data_path in enumerate(data_paths):
+            segs = data_path.split("/")
+            for s, seg in enumerate(segs):
+                if seg in set(["Ancient", "Handwritten", "Layout", "SceneText", "Table"]):
+                    datasets[idx] = segs[s+1]
+                if seg in set(["train", "test", "val"]):
+                    subdatas[idx] = segs[s-1]
 
+        datasets = [item1 + " " + item2 if item1 != item2 else item1 for item1, item2 in zip(datasets, subdatas)]
+        
+        return datasets
+    
+    
     def _class_num_of_each_dataset(self, data_paths, image_names):
         """
         Calculates the sampling probabilities based on the number of classes in each dataset.
@@ -148,10 +156,10 @@ class DocSAM_GT(data.Dataset):
             image = np.array(image)[:,:,::-1].copy()
         else:
             image = cv2.imread(img_path, cv2.IMREAD_COLOR)
-        
+
         image = torch.from_numpy(image.transpose((2, 0, 1))).float()
         mask  = torch.ones((1, image.size(1),  image.size(2))).float()
-
+        
         return image, mask
 
 
@@ -188,7 +196,6 @@ class DocSAM_GT(data.Dataset):
             if isinstance(coco_data["annotations"][j]["category_id"], str):
                 coco_data["annotations"][j]["category_id"] = label2id[coco_data["annotations"][j]["category_id"]]
                 
-
         # Process categories: remove specific categories and reassign IDs
         category_names = [item["name"] for item in coco_data["categories"] if item["name"] != "_background_"]
         if "table" in category_names and "text word" in category_names:
@@ -317,13 +324,11 @@ class DocSAM_GT(data.Dataset):
         
         Parameters:
         - image: Tensor, input image tensor.
-        - mask: Tensor, input mask tensor.
         - coco_data: dict, COCO format annotations.
         - dsize: tuple(int, int), desired output size (height, width).
         
         Returns:
         - image: Tensor, cropped image.
-        - mask: Tensor, cropped mask.
         - coco_data: dict, updated COCO annotations after cropping.
         """
 
@@ -362,7 +367,7 @@ class DocSAM_GT(data.Dataset):
         return image, mask, coco_data
     
     
-    def _data_resize(self, image, mask, coco_data, dsize=None):
+    def _data_resize(self, image, mask, coco_data=None, dsize=None):
         """
         Resizes the input image, mask, and updates COCO annotations accordingly.
         
@@ -413,7 +418,8 @@ class DocSAM_GT(data.Dataset):
             
         image = F.interpolate(image[None], size=(hei, wid), mode="area")[0]
         mask = F.interpolate(mask[None], size=(hei, wid), mode="nearest")[0]
-        coco_data = self._coco_data_reszie(coco_data, (hei, wid))
+        if coco_data is not None:
+            coco_data = self._coco_data_reszie(coco_data, (hei, wid)) 
             
         return image, mask, coco_data
 
@@ -423,73 +429,53 @@ class DocSAM_GT(data.Dataset):
         Generates masks for both semantic and instance segmentation from COCO annotations.
         
         Parameters:
-        - coco_data: dict, COCO format annotations.
+        - coco_data: dict, COCO format annotations containing images, categories, and annotations.
         
         Returns:
-        - instance_masks: Tensor, generated instance masks.
-        - instance_bboxes: Tensor, bounding boxes for instances.
-        - instance_labels: Tensor, labels for instances.
-        - semantic_masks: Tensor, generated semantic masks.
-        - class_names: list[str], names of classes including background.
-        - coco_data: dict, updated COCO annotations.
+        - instance_masks: np.ndarray, shape (N, hei, wid), instance segmentation masks.
+        - instance_bboxes: np.ndarray, shape (N, 4), bounding boxes for instances.
+        - instance_labels: np.ndarray, shape (N,), labels for instances (0-based).
+        - semantic_masks: np.ndarray, shape (C+1, hei, wid), semantic masks including background.
+        - class_names: list[str], class names including '_background_'.
+        - coco_data: dict, updated COCO annotations with encoded segmentations.
         """
-
+        
         hei = coco_data["images"][0]["height"]
         wid = coco_data["images"][0]["width"]
         
-        # Semantic segmentation masks initialization
-        semantic_masks = [np.zeros([hei, wid], dtype=np.uint8) for _ in range(len(coco_data["categories"]) + 1)]
-        class_names = [item["name"] for item in coco_data["categories"]] + ["_background_"]
-    
-        # Fill semantic masks
-        for ann in range(len(coco_data["annotations"])):
-            label = int(coco_data["annotations"][ann]["category_id"]) - 1
-            poly = coco_data["annotations"][ann]["segmentation"]
-            poly = [np.array(item, np.int32).reshape(-1, 2) for item in poly]
-            for item in poly:
-                if item.shape[0] == 0:
-                    continue
-                semantic_masks[label] = cv2.fillPoly(semantic_masks[label], [item], color=[1])
-                semantic_masks[-1] = cv2.fillPoly(semantic_masks[-1], [item], color=[1])
+        # Initialize semantic masks (including background)
+        num_classes = len(coco_data["categories"]) + 1
+        num_regions = max(len(coco_data["annotations"]), 1)
+        instance_masks  = np.zeros((num_regions, hei, wid), dtype=np.uint8)
+        instance_bboxes = np.zeros((num_regions, 4), dtype=np.float32)
+        instance_labels = np.zeros((num_regions,), dtype=np.int32)
+        semantic_masks  = np.zeros((num_classes, hei, wid), dtype=np.uint8)
+        class_names     = [item["name"] for item in coco_data["categories"]] + ["_background_"]
         
-        semantic_masks[-1] = 1 - semantic_masks[-1]
-        semantic_masks = [torch.from_numpy(item) for item in semantic_masks]
-        semantic_masks = torch.stack(semantic_masks, dim=0)
-        
-        # Instance segmentation masks initialization
-        instance_masks, instance_bboxes, instance_labels = [], [], []
-
-        # Fill instance masks
         for ann in range(len(coco_data["annotations"])):
             x, y, w, h = coco_data["annotations"][ann]["bbox"]
-            bbox = [x, y, x+w, y+h]
-            
+            instance_bboxes[ann] = np.array([x, y, x + w, y + h], dtype=np.float32)
+            label = int(coco_data["annotations"][ann]["category_id"]) - 1 # 0-based
+            instance_labels[ann] = label
             poly = coco_data["annotations"][ann]["segmentation"]
-            poly = [np.array(item, np.int32).reshape(-1, 2) for item in poly]
-            mask = np.zeros([hei, wid], dtype=np.uint8)
+            poly = [np.array(item, np.int32).reshape(-1, 2) for item in poly if len(item) >= 6]
             for item in poly:
-                if item.shape[0] == 0:
-                    continue
-                mask = cv2.fillPoly(mask, [item], color=[1])
+                instance_masks[ann] = cv2.fillPoly(instance_masks[ann], [item], color=1)
+                semantic_masks[label] = cv2.fillPoly(semantic_masks[label], [item], color=1)
+                semantic_masks[-1] = cv2.fillPoly(semantic_masks[-1], [item], color=1)
             
-            segmentation = mask_utils.encode(np.asfortranarray(mask))
+            segmentation = mask_utils.encode(np.asfortranarray(instance_masks[ann]))
             segmentation['counts'] = segmentation['counts'].decode('utf-8')
             coco_data["annotations"][ann]["segmentation"] = segmentation
             
-            instance_masks.append(torch.from_numpy(mask))
-            instance_bboxes.append(torch.tensor(bbox))
-            instance_labels.append(torch.tensor([int(coco_data["annotations"][ann]["category_id"]) - 1]))
-            
-        if len(coco_data["annotations"]) == 0:
-            instance_masks.append(torch.from_numpy(np.zeros((hei, wid), dtype=np.uint8)))
-            instance_bboxes.append(torch.tensor([0, 0, 0, 0]))
-            instance_labels.append(torch.tensor([0]))
+        semantic_masks[-1] = 1 - semantic_masks[-1]
 
-        instance_masks  = torch.stack(instance_masks, dim=0)
-        instance_bboxes = torch.stack(instance_bboxes, dim=0)
-        instance_labels = torch.cat(instance_labels, dim=0)
-
-        return instance_masks.float(), instance_bboxes.float(), instance_labels.long(), semantic_masks.float(), class_names, coco_data
+        instance_masks = torch.from_numpy(instance_masks).bool()
+        instance_bboxes = torch.from_numpy(instance_bboxes).float()
+        instance_labels = torch.from_numpy(instance_labels).long()
+        semantic_masks = torch.from_numpy(semantic_masks).bool()
+        
+        return instance_masks, instance_bboxes, instance_labels, semantic_masks, class_names, coco_data
     
 
     def __getitem__(self, index):
@@ -509,20 +495,24 @@ class DocSAM_GT(data.Dataset):
             # Adjust index to fit within the range of available images in the selected dataset
             index = index % len(self.image_names[data_idx])
 
-            # Load original image and mask
+            # Load original image, mask and COCO annotations
             ori_image, ori_mask = self._load_image(data_idx, index)
-            # Load and process COCO annotations
-            ori_coco_datas  = self._load_label(data_idx, index, (ori_image.size(1), ori_image.size(2)))
             
+            samples = []
             if self.stage == "train":
-                all_samples = []
+                # Training stage: Generate multiple patches for each image
+                ori_image, ori_mask = self._load_image(data_idx, index)
+                ori_coco_datas = self._load_label(data_idx, index, (ori_image.size(1), ori_image.size(2)))
+                
                 for p in range(self.patch_num):
+                    # Deep copy original data to avoid overwriting
+                    image, mask, coco_datas = self._data_resize(copy.deepcopy(ori_image), copy.deepcopy(ori_mask), copy.deepcopy(ori_coco_datas), dsize=None)
+                    
                     if random.uniform(0, 1) < 0.2:
-                        # Resize data to a fixed patch size
-                        image, mask, coco_datas = self._data_resize(copy.deepcopy(ori_image), copy.deepcopy(ori_mask), copy.deepcopy(ori_coco_datas), dsize=self.patch_size)
+                        # Resize data to a fixed patch size with a probability of 20%
+                        image, mask, coco_datas = self._data_resize(image, mask, coco_datas, dsize=self.patch_size)
                     else:
-                        # Optionally resize without specifying size and apply random crop
-                        image, mask, coco_datas = self._data_resize(copy.deepcopy(ori_image), copy.deepcopy(ori_mask), copy.deepcopy(ori_coco_datas), dsize=None)
+                        # Random crop with a probability of 80%
                         image, mask, coco_datas = self._random_crop(image, mask, coco_datas, dsize=self.patch_size)
                     
                     # Generate masks for segmentation tasks
@@ -530,59 +520,97 @@ class DocSAM_GT(data.Dataset):
                     instance_masks, instance_bboxes, instance_labels, semantic_masks, class_names, coco_datas = self._generate_mask(coco_datas)
 
                     # Add dataset and subdataset names for contextual information
-                    datasets = self.datasets[data_idx]
-                    subdatas = self.subdatas[data_idx]
-                    datasets = datasets + " " + subdatas if subdatas != datasets else datasets
-
-                    # Update background class name with dataset information
-                    # class_names = [datasets + " " + item for item in class_names]
-                    class_names[-1] = datasets + " " + class_names[-1]
-
-                    # Prepare sample dictionary with necessary information
-                    sample = {}
-                    sample['pixel_values'] = image
-                    sample['pixel_mask']   = mask
-                    sample['instance_masks']  = instance_masks
-                    sample['instance_bboxes'] = instance_bboxes
-                    sample['instance_labels'] = instance_labels
-                    sample['semantic_masks']  = semantic_masks
-                    sample['class_names'] = class_names
-                    sample['coco_datas']  = coco_datas
-                    sample['img_bboxes']  = [0, 0, image.size(2), image.size(1)]
-                    sample['datasets']    = datasets
-                    sample['names']       = os.path.splitext(self.image_names[data_idx][index])[0]
-                    all_samples.append(sample)
+                    # class_names = [self.dataset_names[data_idx] + " " + item for item in class_names]
+                    class_names[-1] = self.dataset_names[data_idx] + " " + class_names[-1]
                     
-                return all_samples
+                    # Construct the sample dictionary for training
+                    sample = {
+                        'pixel_values': image,
+                        'pixel_mask': mask,
+                        'instance_masks': instance_masks,
+                        'instance_bboxes': instance_bboxes, 
+                        'instance_labels': instance_labels,
+                        'semantic_masks': semantic_masks,
+                        'coco_datas': coco_datas, 
+                        'class_names': class_names, 
+                        'dataset_names': self.dataset_names[data_idx], 
+                        'image_names': os.path.splitext(self.image_names[data_idx][index])[0],
+                        'image_bboxes': torch.tensor([0, 0, image.size(2), image.size(1)]).long()
+                    }
+                    samples.append(sample)
                     
-            else:
-                # For evaluation stage, process data similarly but without patches
-                image, mask, coco_datas = self._data_resize(copy.deepcopy(ori_image), copy.deepcopy(ori_mask), copy.deepcopy(ori_coco_datas), dsize=None)
+            elif self.stage == "test":
+                # Testing stage: Process data without generating patches
+                image, mask = self._load_image(data_idx, index)
+                coco_datas = self._load_label(data_idx, index, (image.size(1), image.size(2)))
+                
+                # Resize data for testing
+                image, mask, coco_datas = self._data_resize(image, mask, coco_datas, dsize=None)
                 instance_masks, instance_bboxes, instance_labels, semantic_masks, class_names, coco_datas = self._generate_mask(coco_datas)
 
-                datasets = self.datasets[data_idx]
-                subdatas = self.subdatas[data_idx]
-                datasets = datasets + " " + subdatas if subdatas != datasets else datasets
-                # class_names = [datasets + " " + item for item in class_names]
+                # Add dataset and subdataset names for contextual information
+                # class_names = [self.dataset_names[data_idx] + " " + item for item in class_names]
+                class_names[-1] = self.dataset_names[data_idx] + " " + class_names[-1]
                 
-                # Update background class name with dataset information
-                # class_names = [datasets + " " + item for item in class_names]
-                class_names[-1] = datasets + " " + class_names[-1]
-                    
-                sample = {}
-                sample['pixel_values'] = image
-                sample['pixel_mask']   = mask
-                sample['instance_masks']  = instance_masks
-                sample['instance_bboxes'] = instance_bboxes
-                sample['instance_labels'] = instance_labels
-                sample['semantic_masks']  = semantic_masks
-                sample['class_names'] = class_names
-                sample['coco_datas']  = coco_datas
-                sample['img_bboxes']  = [0, 0, image.size(2), image.size(1)]
-                sample['datasets']    = datasets
-                sample['names']       = os.path.splitext(self.image_names[data_idx][index])[0]
-            
-                return sample
+                # Construct the sample dictionary for testing
+                sample = {
+                    'pixel_values': image,
+                    'pixel_mask': mask,
+                    'instance_masks': instance_masks,
+                    'instance_bboxes': instance_bboxes,
+                    'instance_labels': instance_labels,
+                    'semantic_masks': semantic_masks,
+                    'coco_datas': coco_datas,
+                    'class_names': class_names,
+                    'dataset_names': self.dataset_names[data_idx],
+                    'image_names': os.path.splitext(self.image_names[data_idx][index])[0],
+                    'image_bboxes': torch.tensor([0, 0, image.size(2), image.size(1)]).long()
+                }
+                samples.append(sample)
+
+            else:
+                # Evaluation stage: Process data without annotations
+                image, mask = self._load_image(data_idx, index)
+
+                # Resize data for evaluation
+                image, mask, _ = self._data_resize(image, mask, coco_data=None, dsize=None)
+
+                # Default class names for evaluation
+                default_class_names = ["text", "table", "list", "title", "figure", "_background_"]
+                
+                txt_name = os.path.splitext(self.image_names[data_idx][index])[0] + '.txt'
+                if os.path.isfile(os.path.join(self.data_paths[data_idx], "class_name", txt_name)):
+                    # Load custom class names from a text file if available
+                    with open(os.path.join(self.data_paths[data_idx], "class_name", txt_name), encoding="utf8", errors="ignore") as fin:
+                        class_names = [item.strip() for item in fin.readlines()]
+                        print("class_names", class_names)
+                    if len(class_names) == 0:
+                        class_names = default_class_names
+                else:
+                    # Use default class names if no custom file is found
+                    class_names = default_class_names
+
+                # Add dataset and subdataset names for contextual information
+                # class_names = [self.dataset_names[data_idx] + " " + item for item in class_names]
+                class_names[-1] = self.dataset_names[data_idx] + " " + class_names[-1]
+                
+                # Construct the sample dictionary for evaluation
+                sample = {
+                    'pixel_values': image,
+                    'pixel_mask': mask,
+                    'instance_masks': None,
+                    'instance_bboxes': None,
+                    'instance_labels': None,
+                    'semantic_masks': None,
+                    'coco_datas': None,
+                    'class_names': class_names,
+                    'dataset_names': self.dataset_names[data_idx],
+                    'image_names': os.path.splitext(self.image_names[data_idx][index])[0],
+                    'image_bboxes': torch.tensor([0, 0, image.size(2), image.size(1)]).long()
+                }
+                samples.append(sample)
+                
+            return samples
         
         except:
             # Handle exceptions by selecting another random sample
@@ -596,74 +624,70 @@ class DocSAM_GT(data.Dataset):
         Custom collate function for batching samples. Ensures that all samples are padded to the same dimensions.
         
         Parameters:
-        - batch: list[dict], a list of dictionaries containing samples.
+        - batch: list[dict], a list of dictionaries containing samples. Each dictionary represents a single sample 
+        with keys such as 'pixel_values', 'pixel_mask', 'instance_masks', etc.
         
         Returns:
-        - dict, a dictionary containing stacked tensors and lists of various elements.
+        - dict, a dictionary containing stacked tensors and lists of various elements. The tensors are padded 
+        and stacked to ensure uniform dimensions across the batch.
         """
 
-        pixel_values, pixel_mask, instance_masks, instance_bboxes, instance_labels, semantic_masks, class_names, coco_datas, img_bboxes, datasets, names = [], [], [], [], [], [], [], [], [], [], []
-        
-        for sample in batch:
-            if isinstance(sample, dict):
-                # Append individual sample items to respective lists
-                pixel_values.append(sample["pixel_values"])
-                pixel_mask.append(sample["pixel_mask"])
-                instance_masks.append(sample["instance_masks"])
-                instance_bboxes.append(sample["instance_bboxes"])
-                instance_labels.append(sample["instance_labels"])
-                semantic_masks.append(sample["semantic_masks"])
-                class_names.append(sample["class_names"])
-                coco_datas.append(sample["coco_datas"])
-                img_bboxes.append(sample["img_bboxes"])
-                datasets.append(sample["datasets"])
-                names.append(sample["names"])
+        # Initialize a dictionary to collect all elements from the batch
+        batch_dict = {
+            'pixel_values': [], 'pixel_mask': [], 'instance_masks': [], 'instance_bboxes': [], 'instance_labels': [], 'semantic_masks': [],
+            'coco_datas': [], 'class_names': [], 'dataset_names': [], 'image_names': [], 'image_bboxes': []
+        }
 
-            elif isinstance(sample, list):
-                # Handle case where sample is a list of dictionaries
-                for item in sample:
-                    pixel_values.append(item["pixel_values"])
-                    pixel_mask.append(item["pixel_mask"])
-                    instance_masks.append(item["instance_masks"])
-                    instance_bboxes.append(item["instance_bboxes"])
-                    instance_labels.append(item["instance_labels"])
-                    semantic_masks.append(item["semantic_masks"])
-                    class_names.append(item["class_names"])
-                    coco_datas.append(item["coco_datas"])
-                    img_bboxes.append(item["img_bboxes"])
-                    datasets.append(item["datasets"])
-                    names.append(item["names"])
-        
-        
-        # Padding images and masks to the largest dimensions in the batch
-        max_hei = max([im.size(1) for im in pixel_values])
-        max_wid = max([im.size(2) for im in pixel_values])
-        for index in range(len(pixel_values)):
-            row_padding = max_hei - pixel_values[index].size(1)
-            col_padding = max_wid - pixel_values[index].size(2)
-            p2d = (0, col_padding, 0, row_padding)
+        # Iterate through each sample in the batch and populate the batch dictionary
+        for samples in batch:
+            for sample in samples:
+                batch_dict['pixel_values'].append(sample['pixel_values'])
+                batch_dict['pixel_mask'].append(sample['pixel_mask'])
+                batch_dict['instance_masks'].append(sample['instance_masks'])
+                batch_dict['instance_bboxes'].append(sample['instance_bboxes'])
+                batch_dict['instance_labels'].append(sample['instance_labels'])
+                batch_dict['semantic_masks'].append(sample['semantic_masks'])
+                batch_dict['coco_datas'].append(sample['coco_datas'])
+                batch_dict['class_names'].append(sample['class_names'])
+                batch_dict['dataset_names'].append(sample['dataset_names'])
+                batch_dict['image_names'].append(sample['image_names'])
+                batch_dict['image_bboxes'].append(sample['image_bboxes'])
 
-            img_bboxes[index] = [0, 0, pixel_values[index].size(2), pixel_values[index].size(1)]
-            
-            pixel_values[index] = torch.nn.functional.pad(pixel_values[index], p2d, "constant", 0)
-            pixel_mask[index]   = torch.nn.functional.pad(pixel_mask[index], p2d, "constant", 0)
-            instance_masks[index] = torch.nn.functional.pad(instance_masks[index], p2d, "constant", 0)
-            semantic_masks[index] = torch.nn.functional.pad(semantic_masks[index], p2d, "constant", 0)
+        # Padding images and masks to the largest dimensions in the batch (only for training stage)
+        if self.stage == "train":
+            # Find the maximum height and width in the batch
+            max_hei = max([im.size(-2) for im in batch_dict['pixel_values']])  # Maximum height
+            max_wid = max([im.size(-1) for im in batch_dict['pixel_values']])  # Maximum width
 
-        pixel_values = torch.stack(pixel_values)
-        pixel_mask   = torch.stack(pixel_mask)
-        img_bboxes   = torch.tensor(img_bboxes)
-        
-        return {"pixel_values": pixel_values, "pixel_mask": pixel_mask, "instance_masks": instance_masks, "instance_bboxes": instance_bboxes, "instance_labels": instance_labels, \
-            "semantic_masks": semantic_masks, "class_names": class_names, "coco_datas": coco_datas, "img_bboxes": img_bboxes, "datasets": datasets, "names": names}
+            # Pad each sample to match the largest dimensions
+            for index in range(len(batch_dict['pixel_values'])):
+                row_padding = max_hei - batch_dict['pixel_values'][index].size(1)  # Rows to pad
+                col_padding = max_wid - batch_dict['pixel_values'][index].size(2)  # Columns to pad
+                p2d = (0, col_padding, 0, row_padding)  # Padding configuration (left, right, top, bottom)
 
+                # Skip padding if no padding is needed
+                if row_padding == 0 and col_padding == 0:
+                    continue
+
+                # Apply zero-padding to pixel values, pixel masks, instance masks, and semantic masks
+                batch_dict['pixel_values'][index] = torch.nn.functional.pad(batch_dict['pixel_values'][index], p2d, "constant", 0)
+                batch_dict['pixel_mask'][index] = torch.nn.functional.pad(batch_dict['pixel_mask'][index], p2d, "constant", 0)
+                batch_dict['instance_masks'][index] = torch.nn.functional.pad(batch_dict['instance_masks'][index], p2d, "constant", 0)
+                batch_dict['semantic_masks'][index] = torch.nn.functional.pad(batch_dict['semantic_masks'][index], p2d, "constant", 0)
+
+            # Stack tensors to form a batch tensor
+            batch_dict['pixel_values'] = torch.stack(batch_dict['pixel_values'], dim=0)  # Stack image tensors
+            batch_dict['pixel_mask'] = torch.stack(batch_dict['pixel_mask'], dim=0)      # Stack mask tensors
+            batch_dict['image_bboxes'] = torch.stack(batch_dict['image_bboxes'], dim=0)  # Stack bounding box tensors
+
+        return batch_dict
 
 
 if __name__ == '__main__':
 
     image_path = './datasets/coco/train/'
     dataset = DocSAM_GT([data_path], short_range=(704, 896), patch_size=(640, 640), patch_num=1, stage="train")
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True, collate_fn=test_set.collate_fn)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True, collate_fn=dataset.collate_fn)
             
     for i, batch in enumerate(dataloader):
         print(i, batch["pixel_values"].size(), batch["pixel_mask"].size(), batch["instance_masks"][0].size(), batch["instance_labels"][0].size(),)

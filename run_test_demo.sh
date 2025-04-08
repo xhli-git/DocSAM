@@ -28,7 +28,7 @@ EVAL_PATH_6=${DATA_PATH}/SceneText/Total-Text/data/TotalText/test/
 STAGE=test
 MODEL=./pretrained_model/docsam_large_all_dataset.pth
 MODEL_SIZE=large
-SAVE_PATH=./outputs/outputs_test/
+SAVE_PATH=./outputs/outputs_test/demo/
 MAX_NUM=10
 
 SHORT_RANGE=704,896
@@ -36,7 +36,7 @@ PATCH_SIZE=640,640
 PATCH_NUM=1
 KEEP_SIZE=False
 
-GPU_IDS=0
+GPU_IDS=0,1
 
 export OMP_NUM_THREADS=1
 CUDA_VISIBLE_DEVICES=${GPU_IDS} python -B -u test.py \

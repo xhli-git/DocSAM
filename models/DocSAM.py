@@ -172,13 +172,13 @@ class DocSAM(nn.Module):
             outputs (Mask2FormerForUniversalSegmentationOutput): Model output containing predictions and losses.
         """
         
-        pixel_values, pixel_mask, instance_masks, instance_bboxes, instance_labels, semantic_masks, class_names, coco_datas, img_bboxes, datasets, names = \
+        pixel_values, pixel_mask, instance_masks, instance_bboxes, instance_labels, semantic_masks, class_names, coco_datas, image_bboxes, dataset_names, image_names = \
             batch["pixel_values"], batch["pixel_mask"], batch["instance_masks"], batch["instance_bboxes"], batch["instance_labels"], \
-            batch["semantic_masks"], batch["class_names"], batch["coco_datas"], batch["img_bboxes"], batch["datasets"], batch["names"]
+            batch["semantic_masks"], batch["class_names"], batch["coco_datas"], batch["image_bboxes"], batch["dataset_names"], batch["image_names"]
 
         outputs = self.mask2former(pixel_values=pixel_values,
                                    pixel_mask=pixel_mask,
-                                   img_bboxes=img_bboxes,
+                                   image_bboxes=image_bboxes,
                                    instance_masks=instance_masks, 
                                    instance_bboxes=instance_bboxes, 
                                    instance_labels=instance_labels, 

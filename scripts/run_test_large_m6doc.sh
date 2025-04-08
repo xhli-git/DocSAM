@@ -82,15 +82,15 @@ EVAL_PATH_07=${DATA_PATH}/Layout/M6Doc/data/M6Doc/test/
 STAGE=test
 MODEL=./pretrained_model/docsam_large_m6doc.pth
 MODEL_SIZE=large
-SAVE_PATH=./outputs/outputs_test/
-MAX_NUM=10
+SAVE_PATH=./outputs/outputs_test/large_fine_tune/
+MAX_NUM=12000
 
 SHORT_RANGE=704,896
 PATCH_SIZE=800,800
 PATCH_NUM=1
 KEEP_SIZE=False
 
-GPU_IDS=0
+GPU_IDS=0,1,2,3,4,5
 
 export OMP_NUM_THREADS=1
 CUDA_VISIBLE_DEVICES=${GPU_IDS} python -B -u test.py \

@@ -24,10 +24,11 @@ import torch.optim as optim
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 from prefetch_generator import BackgroundGenerator
+import torch.multiprocessing as mp
 
 from datasets.dataset import DocSAM_GT
 from models.DocSAM import DocSAM 
-from test import test
+from test import evaluate_all_datasets
 
 
 MODEL_SIZE = "base"
@@ -275,10 +276,7 @@ def load_para_weights(model, restore_from):
 
 if __name__ == '__main__':
     start = timeit.default_timer()
-    
-    # Set random seed
-    #seed_torch(seed=2023)
-    
+
     # Parse command-line arguments
     args = get_arguments()
 
@@ -333,7 +331,7 @@ if __name__ == '__main__':
     
     if local_rank == 0:
         # Evaluate initial performance metrics
-        min_loss, max_bbox_mAP, max_mask_mAP, max_mask_mF1, max_mIoU = test(args, model, max_num=args.max_num, stage="train") 
+        max_bbox_mAP, max_mask_mAP, max_mask_mF1, max_mIoU = evaluate_all_datasets(args, model, stage="train") 
         
     flag = True
     for i_epoch in range(num_epoch):
@@ -372,7 +370,7 @@ if __name__ == '__main__':
             # Save snapshots and update best model if necessary
             if current_iter % 200 == 0 or current_iter == args.total_iter:
                 if local_rank == 0:
-                    loss, bbox_mAP, mask_mAP, mask_mF1, mIoU = test(args, model, max_num=args.max_num, stage="train") 
+                    bbox_mAP, mask_mAP, mask_mF1, mIoU = evaluate_all_datasets(args, model, stage="train") 
                     if mask_mAP > max_mask_mAP:
                         print(datetime.datetime.now(), 'Best model updated, mAP: {:.4f}-->{:.4f}, taking snapshot...'.format(max_mask_mAP, mask_mAP))
                         torch.save(model.module.state_dict(), os.path.join(args.snapshot_dir, 'best_model.pth'))

@@ -49,7 +49,7 @@ TRAIN_PATH_6=${DATA_PATH}/SceneText/Total-Text/data/TotalText/train/
 # Training settings. You can modify them to fit your own resources.
 MODEL_SIZE=large
 SAVE_PATH=./outputs/outputs_train/
-MAX_NUM=10
+MAX_NUM=2
 
 SHORT_RANGE=704,896
 PATCH_SIZE=640,640

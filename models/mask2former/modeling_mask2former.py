@@ -288,7 +288,7 @@ def sample_point(input_features: Tensor, point_coordinates: Tensor, add_dim=Fals
         point_coordinates = point_coordinates.unsqueeze(2)  # (B, N, 2) -> (B, N, 1, 2)
 
     # use nn.function.grid_sample to get features for points in `point_coordinates` via bilinear interpolation
-    point_features = nn.functional.grid_sample(input_features, 2.0 * point_coordinates - 1.0, **kwargs) # (B, C, N, 1)
+    point_features = nn.functional.grid_sample(input_features.float(), 2.0 * point_coordinates - 1.0, **kwargs) # (B, C, N, 1)
     if add_dim:
         point_features = point_features.squeeze(3)  # (B, C, N, 1) -> # (B, C, N)
 
@@ -1154,14 +1154,14 @@ class LearnablePositionEmbedding2d(nn.Module):
         self.position_embed_y = nn.Embedding(self.hei, self.dim//2)
         self.norm = nn.LayerNorm(self.dim)
 
-    def forward(self, vision_feature, img_bboxes=None, normalize: bool = False,):
+    def forward(self, vision_feature, image_bboxes=None, normalize: bool = False,):
         """
         Forward pass of the LearnablePositionEmbedding2d module.
 
         Parameters:
             - vision_feature (torch.Tensor): 
                 Input tensor of shape `(batch_size, channels, height, width)` representing the vision features to which position embeddings will be added.
-            - img_bboxes (Optional[torch.Tensor]): 
+            - image_bboxes (Optional[torch.Tensor]): 
                 An optional tensor of shape `(batch_size, 4)` containing bounding boxes `[left, top, right, bottom]` for each image in the batch. If provided, 
                 position embeddings are interpolated to fit within these bounding boxes. Default is None.
             - normalize (bool): 
@@ -1186,10 +1186,11 @@ class LearnablePositionEmbedding2d(nn.Module):
         if normalize:
             position_embed = self.norm(position_embed)
 
-        if img_bboxes is not None:
+        if image_bboxes is not None:
             vision_posembs = torch.zeros((N, self.dim, H, W)).to(position_embed)
-            for im, img_bbox in enumerate(img_bboxes):
+            for im, img_bbox in enumerate(image_bboxes):
                 l, t, r, b = img_bbox.long()
+                r, b = max(l + 1, r), max(t + 1, b)
                 vision_posembs[im:im+1, :, t:b, l:r] = nn.functional.interpolate(position_embed[im:im+1], size=(b-t, r-l), mode="bilinear", align_corners=False)
         else:
             vision_posembs = nn.functional.interpolate(position_embed, size=(H,W), mode="bilinear", align_corners=False)
@@ -1666,7 +1667,7 @@ class Mask2FormerPixelDecoder(nn.Module):
     def forward(
         self,
         features,
-        img_bboxes=None,
+        image_bboxes=None,
         encoder_outputs=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1678,7 +1679,7 @@ class Mask2FormerPixelDecoder(nn.Module):
         Parameters:
             features (`List[torch.Tensor]`):
                 List of tensors representing the input feature maps from different levels.
-            img_bboxes (`torch.Tensor`, *optional*):
+            image_bboxes (`torch.Tensor`, *optional*):
                 Bounding boxes for the input images, used for positional encoding.
             encoder_outputs (`torch.Tensor`, *optional*):
                 Precomputed outputs from the encoder to be used instead of running the encoder again.
@@ -1705,7 +1706,7 @@ class Mask2FormerPixelDecoder(nn.Module):
         # Apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         input_embeds = []
         position_embeddings = []
-        posembs = self.position_embedding(features[0], img_bboxes*0.25 if img_bboxes is not None else None, normalize=False)
+        posembs = self.position_embedding(features[0], image_bboxes*0.25 if image_bboxes is not None else None, normalize=False)
         posembs = self.position_projector(posembs)
         for level, x in enumerate(features[::-1][: self.num_levels]):
             input_embeds.append(self.input_projections[level](x))
@@ -1880,14 +1881,14 @@ class Mask2FormerPixelLevelModule(nn.Module):
         self.feat_merge = FusionModule_CNN(config.feature_size, config.mask_feature_size//2, config.mask_feature_size, 4)
 
 
-    def forward(self, pixel_values: Tensor, img_bboxes=None, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:
+    def forward(self, pixel_values: Tensor, image_bboxes=None, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:
         """
         Forward pass of the Mask2FormerPixelLevelModule.
 
         Parameters:
             pixel_values (`torch.Tensor`): 
                 A tensor representing the input images. Expected shape is `(batch_size, num_channels, height, width)`.
-            img_bboxes (`torch.Tensor`, *optional*): 
+            image_bboxes (`torch.Tensor`, *optional*): 
                 Bounding boxes for the input images, which can be used for positional encoding or other purposes. 
                 Default is `None`.
             output_hidden_states (`bool`, *optional*): 
@@ -1907,7 +1908,7 @@ class Mask2FormerPixelLevelModule(nn.Module):
         #print("backbone_features shape:", [item.size() for item in backbone_features]) 
         
         # Extract feature maps from the backbone (encoder)
-        decoder_output = self.decoder(backbone_features, img_bboxes=img_bboxes, output_hidden_states=output_hidden_states)
+        decoder_output = self.decoder(backbone_features, image_bboxes=image_bboxes, output_hidden_states=output_hidden_states)
         
         # Merge the multi-scale features into a single feature map using the fusion module
         feat_fpn = self.feat_merge(decoder_output.multi_scale_features, dsize=backbone_features[0].shape[-2:])
@@ -2772,7 +2773,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
         semantic_padding_masks: Tensor = None,
         pixel_embeddings: Tensor = None,
         pixel_mask: Tensor = None,
-        img_bboxes: Tensor = None,
+        image_bboxes: Tensor = None,
         encoder_hidden_states: Tensor = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -2798,7 +2799,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
                 A tensor of shape [N, C, H, W] representing pixel-wise embeddings, where C is the number of channels.
             pixel_mask (Tensor, optional): 
                 A tensor indicating valid pixels within `pixel_embeddings`. Can be None if not applicable.
-            img_bboxes (Tensor, optional): 
+            image_bboxes (Tensor, optional): 
                 A tensor of shape [N, 4] representing bounding boxes for images. Can be None if not applicable.
             encoder_hidden_states (Tensor): 
                 A list of tensors representing multi-scale image features from the pixel-level module, used as context for decoding.
@@ -2817,7 +2818,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
         N, C, H, W = pixel_embeddings.size()
 
         # position embedding
-        posembs = self.position_embed_2dim(pixel_embeddings, img_bboxes*0.25 if img_bboxes is not None else None, normalize=False)
+        posembs = self.position_embed_2dim(pixel_embeddings, image_bboxes*0.25 if image_bboxes is not None else None, normalize=False)
         mask_posembs  = self.mask_position_conv(posembs)
         image_posembs = self.image_position_conv(posembs)
         image_posembs = [F.interpolate(image_posembs, size=item.shape[-2:], mode='bilinear', align_corners=False) for item in encoder_hidden_states]
@@ -3142,7 +3143,7 @@ class Mask2FormerTransformerModule(nn.Module):
         mask_features: Tensor,
         class_names: List[list[str]],
         pixel_mask: Optional[Tensor] = None,
-        img_bboxes: Optional[Tensor] = None,
+        image_bboxes: Optional[Tensor] = None,
         output_hidden_states: bool = False,
         output_attentions: bool = False,
     ) -> Mask2FormerMaskedAttentionDecoderOutput:
@@ -3154,7 +3155,7 @@ class Mask2FormerTransformerModule(nn.Module):
             mask_features (Tensor): Tensor representing mask features.
             class_names (List[list[str]]): A nested list of class names for generating semantic queries.
             pixel_mask (Optional[Tensor], optional): Pixel-level mask. Defaults to None.
-            img_bboxes (Optional[Tensor], optional): Image bounding boxes. Defaults to None.
+            image_bboxes (Optional[Tensor], optional): Image bounding boxes. Defaults to None.
             output_hidden_states (bool, optional): Whether to return hidden states. Defaults to False.
             output_attentions (bool, optional): Whether to return attentions. Defaults to False.
 
@@ -3193,11 +3194,11 @@ class Mask2FormerTransformerModule(nn.Module):
         instance_bboxes[:, 3] = instance_bboxes[:, 3] / 4
         instance_bboxes = self.xywh_to_xyxy(instance_bboxes)
         instance_bboxes = instance_bboxes[None,:,:].repeat(N, 1, 1)
-        if img_bboxes is None:
+        if image_bboxes is None:
             instance_bboxes[..., [0,2]] = instance_bboxes[..., [0,2]] * W
             instance_bboxes[..., [1,3]] = instance_bboxes[..., [1,3]] * H
         else:
-            for im, img_bbox in enumerate(img_bboxes):
+            for im, img_bbox in enumerate(image_bboxes):
                 instance_bboxes[im, :, [0,2]] = instance_bboxes[im, :, [0,2]] * (img_bbox[2] - img_bbox[0]) + img_bbox[0]
                 instance_bboxes[im, :, [1,3]] = instance_bboxes[im, :, [1,3]] * (img_bbox[3] - img_bbox[1]) + img_bbox[1]
 
@@ -3211,7 +3212,7 @@ class Mask2FormerTransformerModule(nn.Module):
             semantic_padding_masks=semantic_padding_masks,
             pixel_embeddings=mask_features,
             pixel_mask=pixel_mask,
-            img_bboxes=img_bboxes,
+            image_bboxes=image_bboxes,
             encoder_hidden_states=encoder_hidden_states,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
@@ -3320,7 +3321,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         pixel_values: Tensor,
         class_names: List[list[str]],
         pixel_mask: Optional[Tensor] = None,
-        img_bboxes: Optional[Tensor] = None,
+        image_bboxes: Optional[Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -3332,7 +3333,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             pixel_values (Tensor): Pixel values tensor with shape (batch_size, num_channels, height, width).
             class_names (List[list[str]]): A nested list of class names for generating semantic queries.
             pixel_mask (Optional[Tensor], optional): Pixel mask tensor with shape (batch_size, height, width). Defaults to None.
-            img_bboxes (Optional[Tensor], optional): Image bounding boxes tensor. Defaults to None.
+            image_bboxes (Optional[Tensor], optional): Image bounding boxes tensor. Defaults to None.
             output_hidden_states (Optional[bool], optional): Whether to return hidden states. Defaults to None.
             output_attentions (Optional[bool], optional): Whether to return attentions. Defaults to None.
             return_dict (Optional[bool], optional): Whether to return a dictionary or a tuple. Defaults to None.
@@ -3357,7 +3358,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         # Process pixel-level features
         pixel_level_module_output = self.pixel_level_module(
             pixel_values=pixel_values, 
-            img_bboxes=img_bboxes, 
+            image_bboxes=image_bboxes, 
             output_hidden_states=output_hidden_states
         )
 
@@ -3367,7 +3368,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             mask_features=pixel_level_module_output.decoder_mask_features,
             class_names=class_names,
             pixel_mask=pixel_mask,
-            img_bboxes=img_bboxes,
+            image_bboxes=image_bboxes,
             output_hidden_states=True,
             output_attentions=output_attentions,
         )
@@ -3527,7 +3528,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         pixel_values: Tensor,
         class_names: List[list[str]], 
         pixel_mask: Optional[Tensor] = None,
-        img_bboxes: Optional[Tensor] = None,
+        image_bboxes: Optional[Tensor] = None,
         instance_masks: Optional[List[Tensor]] = None,
         instance_bboxes: Optional[List[Tensor]] = None,
         instance_labels: Optional[List[Tensor]] = None,
@@ -3544,7 +3545,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             pixel_values (Tensor): Input image tensor.
             class_names (List[list[str]]): Nested list of class names for generating semantic queries.
             pixel_mask (Optional[Tensor], optional): Pixel mask tensor. Defaults to None.
-            img_bboxes (Optional[Tensor], optional): Image bounding boxes tensor. Defaults to None.
+            image_bboxes (Optional[Tensor], optional): Image bounding boxes tensor. Defaults to None.
             instance_masks (Optional[List[Tensor]], optional): Ground truth instance masks. Defaults to None.
             instance_bboxes (Optional[List[Tensor]], optional): Ground truth bounding boxes. Defaults to None.
             instance_labels (Optional[List[Tensor]], optional): Ground truth labels. Defaults to None.
@@ -3570,7 +3571,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             pixel_values = pixel_values,
             class_names = class_names,
             pixel_mask = pixel_mask,
-            img_bboxes=img_bboxes,
+            image_bboxes=image_bboxes,
             output_hidden_states = output_hidden_states or self.config.use_auxiliary_loss,
             output_attentions = output_attentions,
             return_dict = True,
