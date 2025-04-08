@@ -101,7 +101,7 @@ As an all-in-one model, DocSAM was pre-trained on nearly 50 datasets. We provide
 
 By default, during training, we randomly resize the input images so that their shorter sides range between 704 and 896 pixels. After resizing, we randomly crop the images into patches of size 640×640 pixels. During testing and inference, we uniformly resize the input images to have a shorter side of 800 pixels and perform predictions using a sliding window approach. The window size is set to 640×640 pixels, with strides of 320 pixels in both the horizontal and vertical directions.
 
-Additionally, we provide a model called ```docsam_large_all_dataset_keepsize```, which uses a different resizing method. This model retains the original sizes of the input images as much as possible, ensuring that the shorter sides are within the range of 640 to 1280 pixels. Other settings are kept the same as ```docsam_large_all_dataset```.
+Additionally, we provide a model called ```docsam_large_all_dataset_keepsize```, which uses a different resizing method. This model retains the original sizes of the input images as much as possible, ensuring that the shorter sides are within the range of 640 to 1280 pixels. Other settings are kept the same as ```docsam_large_all_dataset```. 
 
 For fine-tuning on the M<sup>6</sup>Doc, DocLayNet, SCUT-CAB, CTW1500, and Total-Text datasets, we adopt a patch size of 800×800 pixels. This approach aims to prevent regions of interest from being fragmented across different patches.
 
@@ -1321,12 +1321,12 @@ Additionally, the dataset-specific models, including ```docsam_large_m6doc```, `
     <td>0.648</td>
     <td>0.825</td>
     <td>cTDaR-archival</td>
-    <td>0.</td>
-    <td>0.</td>
-    <td>0.</td>
-    <td>0.</td>
-    <td>0.</td>
-    <td>0.</td>
+    <td>0.949</td>
+    <td>0.837</td>
+    <td>0.762</td>
+    <td>0.721</td>
+    <td>0.777</td>
+    <td>0.957</td>
     </tr>
     <tr>
     <td>NTable-cam</td>
@@ -2129,3 +2129,16 @@ Additionally, the dataset-specific models, including ```docsam_large_m6doc```, `
       </tr>
     </tbody>
 </table>
+
+
+## Analyis and Findings
+
+Due to GPU memory limitations, DocSAM relies on cropping during training, testing, and inference. Although we have added a whole-image thumbnail to recover large objects that may be fragmented across patches and designed a score re-weighting strategy to carefully merge segmentation results from different patches, it may still be inferior to directly processing entire images.
+
+Moreover, because of the use of cropping, different resizing strategies may significantly influence performance on different datasets. This can be observed in the results of ```docsam_large_all_dataset``` and ```docsam_large_all_dataset_keepsize```. Compared to ```docsam_large_all_dataset```, which resizes all images to a fixed shorter side of 800 pixels, ```docsam_large_all_dataset_keepsize``` attempts to maintain the native resolution of documents while ensuring the shorter side falls within the range of 640 to 1280 pixels.
+
+This approach may be beneficial for high-resolution documents containing many small objects, as well as for low-resolution documents with large objects. However, in other scenarios—such as high-resolution documents containing large objects—it may be harmful because it could exacerbate the fragmentation problem. 
+
+Moreover, the current version of DocSAM is purely single-modal. Although it performs comparably or even superiorly to previous single-modal methods, it still performs significantly worse than multi-modal models, especially on tasks like logical layout analysis, which require distinguishing between fine-grained text classes.
+
+In future work, we plan to optimize the model's memory usage and reduce computational costs, design more reasonable resizing and cropping strategies, and extend DocSAM to a multi-modal version, thereby further improving its performance and efficiency.
